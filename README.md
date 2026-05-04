@@ -13,7 +13,6 @@ tags:
 - complex-systems
 viewer: false
 ---
-
 # Misinformation-GNN
 
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Dataset-blue)](https://huggingface.co/datasets/NunoBatista/PHEME-Misinformation-Graphs)
@@ -30,7 +29,7 @@ The PHEME dataset captures real-world breaking news events circulating on Twitte
 
 To run this repository locally, you can instantly download the fully processed PyTorch and NetworkX graphs directly from our Hugging Face repository. There is no need to manually parse the raw JSON data.
 
-1. **Install Requirements:** 
+1. **Install Requirements:**
    ```bash
    pip install -r requirements.txt
    ```
@@ -64,6 +63,7 @@ To run this repository locally, you can instantly download the fully processed P
 The goal of this task is **Graph-Level Classification**: determining whether a single breaking-news conversation cascade is a "Rumour" or a "Non-Rumour".
 
 Social media cascades are translated into mathematical graph representations:
+
 * **The Graphs (Cascades):** Each graph represents a single conversational thread triggered by a piece of breaking news.
 * **The Nodes:** Each node represents a single **Tweet**. Every node holds attributes:
   * Dense textual NLP Embeddings (`all-MiniLM-L6-v2`, 384 dimensions)
@@ -76,6 +76,7 @@ Social media cascades are translated into mathematical graph representations:
 The project uses a purely YAML-driven execution pipeline and relies on a highly rigorous **Leave-One-Event-Out Cross-Validation** approach. The model is trained on $N-1$ real-world events and tested on the completely unseen $N$th event, preventing lexical overfitting and forcing the network to learn pure cascade structure.
 
 To run the experiments (Random Forest Baseline, MLP Baseline, Simple GCN):
+
 ```bash
 python src/scripts/run_experiments.py --config configs/experiment.yml
 ```
@@ -91,10 +92,11 @@ Beyond simple classification, the project strictly relies on two modes of analys
 
 ---
 
+
+
 ## Citation & Acknowledgements
 
 This project builds upon the 9-event PHEME dataset. If you utilize this processed dataset or pipeline in your own work, please ensure you cite the original dataset creators:
 
-> Zubiaga, A., Kochkina, E., Liakata, M., Procter, R., Lukasik, M., et al. (2016). Fact-checking updates on the rumorous PHEME dataset. *Figshare*. 
+> Zubiaga, A., Kochkina, E., Liakata, M., Procter, R., Lukasik, M., et al. (2016). Fact-checking updates on the rumorous PHEME dataset. *Figshare*.
 > Dataset DOI: [10.6084/m9.figshare.6392078](https://doi.org/10.6084/m9.figshare.6392078)
-

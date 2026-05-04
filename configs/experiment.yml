@@ -18,7 +18,7 @@ experiments:
     model_type: "mlp"
     hidden_dims: [64, 32]
     learning_rate: 0.001
-    epochs: 50
+    epochs: 100
     dropout: 0.5
     weight_decay: 0.0001
 
@@ -26,6 +26,6 @@ experiments:
     model_type: "gnn"
     hidden_dims: [64, 32]
     learning_rate: 0.001
-    epochs: 50
+    epochs: 100
     dropout: 0.5
     weight_decay: 0.0001
