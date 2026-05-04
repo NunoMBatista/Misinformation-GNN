@@ -36,8 +36,11 @@ def visualize_cascade(thread_id=None, random_pick=False):
     tid = g.graph['thread_id']
     print(f"Visualizing cascade {tid} with {len(g.nodes)} nodes.")
     
-    # Calculate layout once
-    pos = nx.spring_layout(g, k=0.15, iterations=20)
+    # Calculate layout once (k controls optimal distance between nodes)
+    # Default is optimal distance. By dividing it by a much smaller factor
+    # for larger graphs, we force the nodes to strongly repel and space out.
+    optimal_distance = 1.0 / (len(g.nodes)**0.5) if len(g.nodes) > 0 else 0.15
+    pos = nx.spring_layout(g, k=optimal_distance * 4, iterations=50)
     
     # ---------
     # 1. Static Plot (Matplotlib)

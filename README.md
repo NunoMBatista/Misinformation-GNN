@@ -15,9 +15,9 @@ To run this repository locally, you must manually download the PHEME dataset.
 1. **Download the data:** Download the zip file from [Figshare - PHEME dataset of rumours and non-rumours](https://figshare.com/articles/dataset/PHEME_dataset_of_rumours_and_non-rumours/4010619).
 2. **Extract to Directory:** Create a `data/` directory in the root of the project and extract the contents inside of it. Ensure the path aligns exactly as:
    `data/pheme-rnr-dataset/<event-folders>` (e.g. `data/pheme-rnr-dataset/charliehebdo`).
-3. **Pre-Process:** Run the processing script to parse the raw JSON tweets and compile them into NetworkX graph cascades:
+3. **Pre-Process:** Run the processing pipeline to parse the raw JSON tweets, extract network metrics, generate NLP embeddings, and compile them into NetworkX graph cascades:
    ```bash
-   python src/data/prepare_data.py
+   python src/data/preprocessing_pipeline.py
    ```
 
 ## How It Works
