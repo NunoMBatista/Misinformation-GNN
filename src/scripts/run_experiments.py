@@ -5,6 +5,7 @@ import pandas as pd
 from pathlib import Path
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 import sys
+from tqdm import tqdm
 
 # Add project root to path for imports
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
@@ -44,12 +45,13 @@ def main():
         all_true = []
         all_pred = []
         
-        for test_event in events:
+        pbar = tqdm(events, desc=f"CV: {exp_name}")
+        for test_event in pbar:
             # Leave-One-Event-Out Split
             train_data = [d for d in dataset if d.event != test_event]
             test_data = [d for d in dataset if d.event == test_event]
             
-            print(f"  Fold -> Test Event: {test_event} | Train: {len(train_data)} | Test: {len(test_data)}")
+            pbar.write(f"  Fold -> Test Event: {test_event} | Train: {len(train_data)} | Test: {len(test_data)}")
             
             if model_type == "rf":
                 y_true, y_pred = train_rf(config, train_data, test_data)

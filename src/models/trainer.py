@@ -3,9 +3,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import global_mean_pool
+from tqdm import tqdm
 
 # Internal imports
-from src.models import RandomForestBaseline, MLPBaseline, SimpleGNN
+from src.models import RandomForestBaseline, MLPBaseline, SimpleGNN, GATModel
 
 def train_rf(config, train_dataset, test_dataset):
     """Train and evaluate Random Forest on pre-pooled graph features."""
@@ -16,10 +17,10 @@ def train_rf(config, train_dataset, test_dataset):
     )
     
     # Graph-level pooling (mean)
-    X_train = torch.stack([d.x.mean(dim=0) for d in train_dataset]).numpy()
+    X_train = torch.stack([d.x.mean(dim=0) for d in tqdm(train_dataset, desc="Pooling Train", leave=False)]).numpy()
     y_train = torch.cat([d.y for d in train_dataset]).numpy()
     
-    X_test = torch.stack([d.x.mean(dim=0) for d in test_dataset]).numpy()
+    X_test = torch.stack([d.x.mean(dim=0) for d in tqdm(test_dataset, desc="Pooling Test", leave=False)]).numpy()
     y_test = torch.cat([d.y for d in test_dataset]).numpy()
     
     rf.fit(X_train, y_train)
@@ -48,6 +49,14 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
             dropout=config.get('dropout', 0.5)
         ).to(device)
         is_gnn = True
+    elif model_name == "gat":
+        model = GATModel(
+            input_dim=input_dim, 
+            hidden_dims=config.get('hidden_dims', [64, 32]),
+            heads=config.get('heads', 4),
+            dropout=config.get('dropout', 0.5)
+        ).to(device)
+        is_gnn = True
     else:
         raise ValueError(f"Unknown neural network type: {model_name}")
 
@@ -60,8 +69,10 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
     criterion = nn.BCEWithLogitsLoss()
     
     epochs = config.get('epochs', 50)
-    for epoch in range(epochs):
+    pbar = tqdm(range(epochs), desc=f"Training {model_name.upper()}", leave=False)
+    for epoch in pbar:
         model.train()
+        epoch_loss = 0
         for batch in train_loader:
             batch = batch.to(device)
             optimizer.zero_grad()
@@ -75,12 +86,15 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
             loss = criterion(out, batch.y.float())
             loss.backward()
             optimizer.step()
+            epoch_loss += loss.item()
+        
+        pbar.set_postfix(loss=f"{epoch_loss/len(train_loader):.4f}")
             
     # Evaluation
     model.eval()
     all_preds, all_labels = [], []
     with torch.no_grad():
-        for batch in test_loader:
+        for batch in tqdm(test_loader, desc="Evaluating", leave=False):
             batch = batch.to(device)
             if is_gnn:
                 out = model(batch.x, batch.edge_index, batch.batch)

@@ -1,4 +1,4 @@
 from .baselines import RandomForestBaseline, MLPBaseline
-from .gnn import SimpleGNN
+from .gnn import SimpleGNN, GATModel
 
-__all__ = ["RandomForestBaseline", "MLPBaseline", "SimpleGNN"]
+__all__ = ["RandomForestBaseline", "MLPBaseline", "SimpleGNN", "GATModel"]
