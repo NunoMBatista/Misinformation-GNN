@@ -8,27 +8,27 @@ features:
   use_outdegree: true
 
 experiments:
-  random_forest:
-    model_type: "rf"
-    n_estimators: 100
-    max_depth: 10
-    random_state: 42
+#   random_forest:
+#     model_type: "rf"
+#     n_estimators: 100
+#     max_depth: 10
+#     random_state: 42
   
-  mlp_baseline:
-    model_type: "mlp"
-    hidden_dims: [64, 32]
-    learning_rate: 0.001
-    epochs: 100
-    dropout: 0.5
-    weight_decay: 0.0001
+#   mlp_baseline:
+#     model_type: "mlp"
+#     hidden_dims: [64, 32]
+#     learning_rate: 0.001
+#     epochs: 100
+#     dropout: 0.5
+#     weight_decay: 0.0001
 
-  gnn_simple:
-    model_type: "gnn"
-    hidden_dims: [64, 32]
-    learning_rate: 0.001
-    epochs: 100
-    dropout: 0.5
-    weight_decay: 0.0001
+#   gnn_simple:
+#     model_type: "gnn"
+#     hidden_dims: [64, 32]
+#     learning_rate: 0.001
+#     epochs: 100
+#     dropout: 0.5
+#     weight_decay: 0.0001
 
   gat_model:
     model_type: "gat"

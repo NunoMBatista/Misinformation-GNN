@@ -55,11 +55,29 @@ def main():
             
             if model_type == "rf":
                 y_true, y_pred = train_rf(config, train_data, test_data)
-            elif model_type in ["mlp", "gnn"]:
+            elif model_type in ["mlp", "gnn", "gat"]:
                 y_true, y_pred = train_nn(config, model_type, train_data, test_data, input_dim)
             else:
                 raise ValueError(f"Unknown model_type: {model_type}")
                 
+            # Calculate fold metrics
+            f_acc = accuracy_score(y_true, y_pred)
+            f_prec = precision_score(y_true, y_pred, zero_division=0)
+            f_rec = recall_score(y_true, y_pred, zero_division=0)
+            f_f1 = f1_score(y_true, y_pred, zero_division=0)
+            
+            pbar.write(f"    [Fold Results] Acc: {f_acc:.4f} | Prec: {f_prec:.4f} | Rec: {f_rec:.4f} | F1: {f_f1:.4f}")
+            
+            results.append({
+                "Experiment": exp_name,
+                "Model": model_type,
+                "Fold": test_event,
+                "Accuracy": f_acc,
+                "Precision": f_prec,
+                "Recall": f_rec,
+                "F1-Score": f_f1
+            })
+            
             all_true.extend(y_true)
             all_pred.extend(y_pred)
             
@@ -72,6 +90,7 @@ def main():
         results.append({
             "Experiment": exp_name,
             "Model": model_type,
+            "Fold": "GLOBAL",
             "Accuracy": acc,
             "Precision": prec,
             "Recall": rec,
