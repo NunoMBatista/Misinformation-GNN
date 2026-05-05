@@ -31,6 +31,7 @@ def train_rf(config, train_dataset, test_dataset):
 def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
     """Train and evaluate Neural Networks (MLP or GNN)."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"  [Device] Training {model_name.upper()} on: {device}")
     
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
