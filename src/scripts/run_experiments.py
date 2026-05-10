@@ -3,6 +3,7 @@ import yaml
 import datetime
 import pandas as pd
 from pathlib import Path
+from collections import defaultdict
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 import sys
 from tqdm import tqdm
@@ -18,23 +19,70 @@ def parse_args():
     parser.add_argument("--config", type=str, required=True, help="Path to experiment YAML config")
     return parser.parse_args()
 
+
+def _event_stats(dataset):
+    """Returns an OrderedDict: event -> {total, rumour, non_rumour}."""
+    stats = defaultdict(lambda: {"total": 0, "rumour": 0, "non_rumour": 0})
+    for d in dataset:
+        label = int(d.y.item())
+        stats[d.event]["total"] += 1
+        if label == 1:
+            stats[d.event]["rumour"] += 1
+        else:
+            stats[d.event]["non_rumour"] += 1
+    return dict(sorted(stats.items()))
+
+
+def _print_stats(dataset, header):
+    stats = _event_stats(dataset)
+    print(f"\n{header}  ({len(dataset)} graphs total)")
+    print(f"  {'Event':<45} {'Total':>6}  {'R':>5}  {'NR':>5}")
+    print(f"  {'-'*45} {'-'*6}  {'-'*5}  {'-'*5}")
+    for event, s in stats.items():
+        print(f"  {event:<45} {s['total']:>6}  {s['rumour']:>5}  {s['non_rumour']:>5}")
+
+
+def preprocess_dataset(dataset, preprocessing_config):
+    excluded = set(preprocessing_config.get("excluded_events", []))
+    min_nodes = preprocessing_config.get("min_nodes", 3)
+
+    _print_stats(dataset, "Before preprocessing:")
+
+    removed_event = [d for d in dataset if d.event in excluded]
+    removed_nodes = [d for d in dataset if d.event not in excluded and d.num_nodes < min_nodes]
+
+    dataset = [d for d in dataset if d.event not in excluded and d.num_nodes >= min_nodes]
+
+    if excluded:
+        print(f"\n  Excluded events ({len(removed_event)} graphs removed): {sorted(excluded)}")
+    print(f"  Removed {len(removed_nodes)} graphs with fewer than {min_nodes} nodes.")
+
+    _print_stats(dataset, "After preprocessing:")
+    print()
+    return dataset
+
+
 def main():
     args = parse_args()
-    
+
     with open(args.config, 'r') as f:
         config_data = yaml.safe_load(f)
-        
+
     dataset = load_data()
-    
+
     # Filter features dynamically from YAML
     features_config = config_data.get("features", {})
     dataset, input_dim = filter_features(dataset, features_config)
-    
-    print(f"Loaded dataset containing {len(dataset)} graphs. Active feature dimension: {input_dim}")
-    
+
+    # Pre-processing: drop excluded events and tiny graphs
+    preprocessing_config = config_data.get("preprocessing", {})
+    dataset = preprocess_dataset(dataset, preprocessing_config)
+
+    print(f"Dataset ready: {len(dataset)} graphs | Feature dimension: {input_dim}")
+
     # Identify unique events
-    events = list(set([d.event for d in dataset]))
-    print(f"Discovered {len(events)} events for Leave-One-Out cross validation: {events}")
+    events = sorted(set(d.event for d in dataset))
+    print(f"Events for LOEO cross-validation ({len(events)}): {events}")
     
     results = []
     

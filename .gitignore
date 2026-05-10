@@ -208,3 +208,7 @@ __marimo__/
 
 data/**
 outputs/
+
+# claude
+.claude
+docs/context

@@ -1,12 +1,38 @@
+import random
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from collections import defaultdict
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import global_mean_pool
 from tqdm import tqdm
 
 # Internal imports
 from src.models import RandomForestBaseline, MLPBaseline, SimpleGNN, GATModel
+
+
+def _balance_per_event(train_data, random_state=42):
+    """Undersample the majority class within each event so every event
+    contributes an equal number of rumour and non-rumour examples."""
+    rng = random.Random(random_state)
+    by_event_label = defaultdict(list)
+    for d in train_data:
+        by_event_label[(d.event, int(d.y.item()))].append(d)
+
+    balanced = []
+    events = sorted(set(event for event, _ in by_event_label))
+    for event in events:
+        cls0 = by_event_label[(event, 0)]
+        cls1 = by_event_label[(event, 1)]
+        n = min(len(cls0), len(cls1))
+        if n == 0:
+            continue
+        balanced.extend(rng.sample(cls0, n))
+        balanced.extend(rng.sample(cls1, n))
+
+    rng.shuffle(balanced)
+    return balanced
+
 
 def train_rf(config, train_dataset, test_dataset):
     """Train and evaluate Random Forest on pre-pooled graph features."""
@@ -15,7 +41,9 @@ def train_rf(config, train_dataset, test_dataset):
         max_depth=config.get('max_depth', 10),
         random_state=config.get('random_state', 42)
     )
-    
+
+    train_dataset = _balance_per_event(train_dataset, random_state=config.get('random_state', 42))
+
     # Graph-level pooling (mean)
     X_train = torch.stack([d.x.mean(dim=0) for d in tqdm(train_dataset, desc="Pooling Train", leave=False)]).numpy()
     y_train = torch.cat([d.y for d in train_dataset]).numpy()
@@ -33,6 +61,7 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"  [Device] Training {model_name.upper()} on: {device}")
     
+    train_dataset = _balance_per_event(train_dataset, random_state=42)
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
     

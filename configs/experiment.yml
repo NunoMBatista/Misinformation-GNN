@@ -1,3 +1,9 @@
+preprocessing:
+  excluded_events:
+    - "prince-toronto-all-rnr-threads"
+    - "ebola-essien-all-rnr-threads"
+  min_nodes: 3
+
 features:
   use_nlp: true
   use_followers: true
