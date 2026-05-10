@@ -2,6 +2,7 @@ preprocessing:
   excluded_events:
     - "prince-toronto-all-rnr-threads"
     - "ebola-essien-all-rnr-threads"
+    - "ferguson-all-rnr-threads"
   min_nodes: 3
 
 features:

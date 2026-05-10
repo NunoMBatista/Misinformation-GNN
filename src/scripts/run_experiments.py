@@ -111,7 +111,7 @@ def main():
             
             if model_type == "rf":
                 y_true, y_pred = train_rf(config, train_data, test_data)
-            elif model_type in ["mlp", "gnn", "gat"]:
+            elif model_type in ["mlp", "gnn", "gat", "improved_gnn", "improved_gat"]:
                 y_true, y_pred = train_nn(config, model_type, train_data, test_data, input_dim)
             else:
                 raise ValueError(f"Unknown model_type: {model_type}")

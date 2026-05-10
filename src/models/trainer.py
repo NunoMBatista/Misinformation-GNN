@@ -8,7 +8,7 @@ from torch_geometric.nn import global_mean_pool
 from tqdm import tqdm
 
 # Internal imports
-from src.models import RandomForestBaseline, MLPBaseline, SimpleGNN, GATModel
+from src.models import RandomForestBaseline, MLPBaseline, SimpleGNN, GATModel, ImprovedGNN, ImprovedGAT
 
 
 def _balance_per_event(train_data, random_state=42):
@@ -87,18 +87,37 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
             dropout=config.get('dropout', 0.5),
         ).to(device)
         is_gnn = True
+    elif model_name == "improved_gnn":
+        model = ImprovedGNN(
+            input_dim=input_dim,
+            hidden_dims=config.get('hidden_dims', [128, 64]),
+            dropout=config.get('dropout', 0.4),
+            edge_direction=config.get('edge_direction', 'bidirectional'),
+        ).to(device)
+        is_gnn = True
+    elif model_name == "improved_gat":
+        model = ImprovedGAT(
+            input_dim=input_dim,
+            hidden_dims=config.get('hidden_dims', [128, 64]),
+            heads=config.get('heads', 2),
+            dropout=config.get('dropout', 0.4),
+            edge_direction=config.get('edge_direction', 'bidirectional'),
+        ).to(device)
+        is_gnn = True
     else:
         raise ValueError(f"Unknown neural network type: {model_name}")
 
+    lr = float(config.get('learning_rate', 0.001))
     optimizer = optim.Adam(
-        model.parameters(), 
-        lr=float(config.get('learning_rate', 0.001)), 
+        model.parameters(),
+        lr=lr,
         weight_decay=float(config.get('weight_decay', 0.0001))
     )
-    # y is [0] or [1], need float for BCEWithLogitsLoss
     criterion = nn.BCEWithLogitsLoss()
-    
+
     epochs = config.get('epochs', 50)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr / 10)
+
     pbar = tqdm(range(epochs), desc=f"Training {model_name.upper()}", leave=False)
     for epoch in pbar:
         model.train()
@@ -106,7 +125,7 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
         for batch in train_loader:
             batch = batch.to(device)
             optimizer.zero_grad()
-            
+
             if is_gnn:
                 out = model(batch.x, batch.edge_index, batch.batch)
             else:
@@ -115,9 +134,11 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
 
             loss = criterion(out, batch.y.float())
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             epoch_loss += loss.item()
-        
+
+        scheduler.step()
         pbar.set_postfix(loss=f"{epoch_loss/len(train_loader):.4f}")
             
     # Evaluation
