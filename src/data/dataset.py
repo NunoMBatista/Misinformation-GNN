@@ -9,6 +9,67 @@ def load_data():
     # Use weights_only=False to allow loading custom objects if required by warnings
     return torch.load(data_path, weights_only=False)
 
+
+def _bfs_depths(edge_index, num_nodes):
+    """BFS from node 0 (source tweet). Returns float tensor of depths; -1 = unreachable."""
+    depths = [-1.0] * num_nodes
+    if num_nodes == 0 or edge_index.shape[1] == 0:
+        if num_nodes > 0:
+            depths[0] = 0.0
+        return torch.tensor(depths, dtype=torch.float)
+
+    depths[0] = 0.0
+    adj = [[] for _ in range(num_nodes)]
+    for src, dst in edge_index.t().tolist():
+        adj[int(src)].append(int(dst))
+
+    queue = [0]
+    while queue:
+        node = queue.pop(0)
+        for nb in adj[node]:
+            if depths[nb] == -1.0:
+                depths[nb] = depths[node] + 1.0
+                queue.append(nb)
+
+    return torch.tensor(depths, dtype=torch.float)
+
+
+def add_graph_features(dataset, use_root=True, use_depth=True):
+    """
+    Appends computed positional features to each graph's node matrix.
+    Called after filter_features(), so these columns are always appended last.
+
+      is_root  (use_root=True) : 1.0 for node 0 (source tweet), 0.0 elsewhere.
+               Node 0 is always the source tweet by insertion order — verified
+               across the full dataset via thread_id matching.
+
+      depth    (use_depth=True): BFS depth from node 0. Lets the model learn
+               position-conditioned representations without relying on attention
+               to implicitly discover cascade depth.
+
+    Returns (dataset, new_input_dim).
+    """
+    if not use_root and not use_depth:
+        return dataset, dataset[0].x.shape[1] if dataset else 0
+
+    for data in dataset:
+        n       = data.num_nodes
+        extras  = []
+
+        if use_root:
+            is_root       = torch.zeros(n, 1)
+            is_root[0, 0] = 1.0
+            extras.append(is_root)
+
+        if use_depth:
+            depth = _bfs_depths(data.edge_index, n).unsqueeze(1)
+            extras.append(depth)
+
+        data.x = torch.cat([data.x] + extras, dim=1)
+
+    return dataset, dataset[0].x.shape[1] if dataset else 0
+
+
 def filter_features(dataset, features_config):
     """Dynamically filters the node feature matrix based on YAML config preferences"""
     indices = []

@@ -8,6 +8,8 @@ Graph Neural Network project for rumour/misinformation detection on Twitter casc
 
 ## Commands
 
+All scripts must be run from the **project root** — paths like `data/processed/pheme_pyg_dataset.pt` are relative to it.
+
 ### Setup
 ```bash
 pip install -r requirements.txt
@@ -21,6 +23,11 @@ python src/scripts/download_dataset.py
 ### Run experiments (main entry point)
 ```bash
 python src/scripts/run_experiments.py --config configs/experiment.yml
+```
+
+### Complex systems / topological analysis
+```bash
+python src/scripts/complex_systems_analysis.py   # outputs charts to outputs/complex_systems/
 ```
 
 ### Visualize cascades
@@ -50,6 +57,8 @@ Raw PHEME JSON (Twitter threads)
     → pheme_pyg_dataset.pt       # Serialized PyG dataset (HuggingFace: NunoBatista/PHEME-Misinformation-Graphs)
 ```
 
+`prepare_data.py` in the same builder directory is an older, simpler script that was superseded by `preprocessing_pipeline.py` — prefer the latter.
+
 ### Node features (390 dimensions total)
 - `[0:384]`: NLP text embedding (all-MiniLM-L6-v2)
 - `[384]`: Log-normalized follower count
@@ -60,6 +69,13 @@ Raw PHEME JSON (Twitter threads)
 - `[389]`: Out-degree centrality
 
 Feature channels are **dynamically masked** at load time by `filter_features()` in `src/data/dataset.py` based on YAML config toggles — the `.pt` file always stores all 390 features.
+
+### PyG Data object custom attributes
+
+Beyond the standard `x`, `edge_index`, `y` fields, each graph carries:
+- `thread_id` — original Twitter thread ID (for XAI traceability)
+- `event` — event name used for LOEO splits
+- `text` — list of raw tweet strings per node (for interpretability without loading the gpickle)
 
 ### Models
 
@@ -74,9 +90,14 @@ All models reduce to a per-graph vector then classify with a single logit:
 
 GATv2Conv doubles the hidden dimension at each layer (e.g. `hidden_dim=32` → intermediate is `64`), so the classifier head receives `hidden_dims[-1] * heads` features. This is handled in `src/models/gnn.py`.
 
+### Class balancing
+
+`_balance_per_event()` in `src/models/trainer.py` undersamples the majority class **within each event** before training, so no single event's class imbalance dominates training. This runs automatically inside `train_rf()` and `train_nn()`.
+
 ### Experiment orchestration
 
 `configs/experiment.yml` drives everything:
+- **`preprocessing`** section: `excluded_events` list (two events excluded by default) and `min_nodes` threshold (graphs with fewer nodes are dropped)
 - **`features`** section: toggle individual feature channels on/off
 - **`experiments`** section: list of models with their hyperparameters
 
@@ -93,6 +114,7 @@ GATv2Conv doubles the hidden dimension at each layer (e.g. `hidden_dim=32` → i
 | Purpose | Path |
 |---|---|
 | Main entry point | `src/scripts/run_experiments.py` |
+| Complex systems analysis | `src/scripts/complex_systems_analysis.py` |
 | Experiment config | `configs/experiment.yml` |
 | GNN/GAT architectures | `src/models/gnn.py` |
 | Training loop | `src/models/trainer.py` |

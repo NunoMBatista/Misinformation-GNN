@@ -60,31 +60,31 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
     """Train and evaluate Neural Networks (MLP or GNN)."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"  [Device] Training {model_name.upper()} on: {device}")
-    
+
     train_dataset = _balance_per_event(train_dataset, random_state=42)
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
-    
+
     if model_name == "mlp":
         model = MLPBaseline(
-            input_dim=input_dim, 
-            hidden_dims=config.get('hidden_dims', [64, 32]), 
+            input_dim=input_dim,
+            hidden_dims=config.get('hidden_dims', [64, 32]),
             dropout=config.get('dropout', 0.5)
         ).to(device)
         is_gnn = False
     elif model_name == "gnn":
         model = SimpleGNN(
-            input_dim=input_dim, 
-            hidden_dims=config.get('hidden_dims', [64, 32]), 
-            dropout=config.get('dropout', 0.5)
+            input_dim=input_dim,
+            hidden_dims=config.get('hidden_dims', [64, 32]),
+            dropout=config.get('dropout', 0.5),
         ).to(device)
         is_gnn = True
     elif model_name == "gat":
         model = GATModel(
-            input_dim=input_dim, 
+            input_dim=input_dim,
             hidden_dims=config.get('hidden_dims', [64, 32]),
             heads=config.get('heads', 4),
-            dropout=config.get('dropout', 0.5)
+            dropout=config.get('dropout', 0.5),
         ).to(device)
         is_gnn = True
     else:
@@ -112,7 +112,7 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
             else:
                 x_pooled = global_mean_pool(batch.x, batch.batch)
                 out = model(x_pooled)
-                
+
             loss = criterion(out, batch.y.float())
             loss.backward()
             optimizer.step()
@@ -131,7 +131,7 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
             else:
                 x_pooled = global_mean_pool(batch.x, batch.batch)
                 out = model(x_pooled)
-                
+
             preds = (torch.sigmoid(out) > 0.5).int()
             all_preds.extend(preds.cpu().tolist())
             all_labels.extend(batch.y.cpu().tolist())

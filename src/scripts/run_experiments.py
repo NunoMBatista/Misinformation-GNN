@@ -11,7 +11,7 @@ from tqdm import tqdm
 # Add project root to path for imports
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
-from src.data.dataset import load_data, filter_features
+from src.data.dataset import load_data, filter_features, add_graph_features
 from src.models.trainer import train_rf, train_nn
 
 def parse_args():
@@ -73,6 +73,14 @@ def main():
     # Filter features dynamically from YAML
     features_config = config_data.get("features", {})
     dataset, input_dim = filter_features(dataset, features_config)
+
+    # Append positional features (is_root, depth) if requested.
+    # These are computed at load time — the .pt file is not modified.
+    use_root  = features_config.get("use_root", False)
+    use_depth = features_config.get("use_depth", False)
+    if use_root or use_depth:
+        dataset, input_dim = add_graph_features(dataset, use_root=use_root, use_depth=use_depth)
+        print(f"Added positional features (is_root={use_root}, depth={use_depth}) → dim now {input_dim}")
 
     # Pre-processing: drop excluded events and tiny graphs
     preprocessing_config = config_data.get("preprocessing", {})

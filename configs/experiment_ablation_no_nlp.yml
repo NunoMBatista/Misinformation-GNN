@@ -5,15 +5,15 @@ preprocessing:
   min_nodes: 3
 
 features:
-  use_nlp: true
+  use_nlp: false      # ABLATION: NLP embeddings removed — model must rely on graph structure only
   use_followers: true
   use_verified: true
   use_pagerank: true
   use_degree: true
   use_indegree: true
   use_outdegree: true
-  use_root: true    # binary flag: 1.0 for node 0 (source tweet), 0.0 elsewhere
-  use_depth: true   # BFS depth from node 0 — explicit positional signal
+  use_root: true
+  use_depth: true
 
 experiments:
   random_forest:
