@@ -1,28 +1,27 @@
 from sentence_transformers import SentenceTransformer
-from tqdm import tqdm
+
+MODEL_NAME = 'all-MiniLM-L6-v2'
+BATCH_SIZE = 64
+
 
 def embed_nodes(graphs):
     """
-    Takes a list of graphs, extracts the 'text' attribute of every node,
-    and uses a local pre-trained language model to generate dense numerical embeddings.
-    
-    The raw 'text' attribute is left intact to ensure visualizations still work.
+    Embeds all tweet nodes using all-MiniLM-L6-v2 (384-dim).
+    The raw 'text' attribute is left intact for downstream visualisations.
     """
-    # Load a lightweight, fast text-embedding model from HuggingFace
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    
-    for G in tqdm(graphs, desc="Embedding Nodes"):
-        node_ids = list(G.nodes())
-        
-        # Extract text strings for the entire graph
-        texts = [G.nodes[node].get('text', '') for node in node_ids]
-        
-        if texts:
-            # Batch encode strings into NumPy arrays (384 dimensions)
-            embeddings = model.encode(texts, show_progress_bar=False)
-            
-            # Map embeddings back onto their respective nodes
-            for idx, node in enumerate(node_ids):
-                G.nodes[node]['text_embedding'] = embeddings[idx]
-                
+    print(f"  Loading {MODEL_NAME}...")
+    model = SentenceTransformer(MODEL_NAME)
+
+    # Flatten all (graph_idx, node_id, text) so we can embed in large batches
+    records = []
+    for g_idx, G in enumerate(graphs):
+        for node in G.nodes():
+            records.append((g_idx, node, G.nodes[node].get('text', '') or ''))
+
+    texts = [r[2] for r in records]
+    all_embs = model.encode(texts, batch_size=BATCH_SIZE, show_progress_bar=True)
+
+    for (g_idx, node, _), emb in zip(records, all_embs):
+        graphs[g_idx].nodes[node]['text_embedding'] = emb
+
     return graphs

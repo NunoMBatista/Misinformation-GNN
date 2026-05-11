@@ -1,0 +1,71 @@
+preprocessing:
+  excluded_events:
+    - "prince-toronto-all-rnr-threads"
+    - "ebola-essien-all-rnr-threads"
+    - "ferguson-all-rnr-threads"
+  min_nodes: 3
+
+# Text + user only: NLP (384) + followers + verified = 386 dims
+# No graph-derived structural features (no PageRank, degree, depth, is_root)
+# GNN advantage here comes purely from message passing, not structural node features
+features:
+  use_nlp: true
+  use_followers: true
+  use_verified: true
+  use_pagerank: false
+  use_degree: false
+  use_indegree: false
+  use_outdegree: false
+  use_root: false
+  use_depth: false
+
+experiments:
+  rf:
+    model_type: "rf"
+    n_estimators: 100
+    max_depth: 10
+    random_state: 42
+
+  mlp:
+    model_type: "mlp"
+    hidden_dims: [128, 64]
+    learning_rate: 0.001
+    epochs: 100
+    dropout: 0.5
+    weight_decay: 0.0001
+    use_focal_loss: true
+    focal_gamma: 2.0
+
+  gnn:
+    model_type: "improved_gnn"
+    edge_direction: "bidirectional"
+    hidden_dims: [128, 64]
+    learning_rate: 0.001
+    epochs: 150
+    dropout: 0.4
+    weight_decay: 0.0001
+    use_focal_loss: true
+    focal_gamma: 2.0
+
+  gat:
+    model_type: "improved_gat"
+    edge_direction: "bidirectional"
+    hidden_dims: [128, 64]
+    heads: 2
+    learning_rate: 0.001
+    epochs: 150
+    dropout: 0.4
+    weight_decay: 0.0001
+    use_focal_loss: true
+    focal_gamma: 2.0
+
+  gin:
+    model_type: "gin"
+    edge_direction: "bidirectional"
+    hidden_dims: [128, 64]
+    learning_rate: 0.001
+    epochs: 150
+    dropout: 0.4
+    weight_decay: 0.0001
+    use_focal_loss: true
+    focal_gamma: 2.0

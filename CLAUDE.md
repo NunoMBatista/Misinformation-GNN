@@ -8,7 +8,11 @@ Graph Neural Network project for rumour/misinformation detection on Twitter casc
 
 ## Commands
 
-All scripts must be run from the **project root** — paths like `data/processed/pheme_pyg_dataset.pt` are relative to it.
+All scripts must be run from the **project root** — paths like `data/processed/pheme_pyg_dataset.pt` are relative to it. The ML virtualenv at `~/python_envs/ML` has all dependencies; system Python lacks PyTorch.
+
+```bash
+source ~/python_envs/ML/bin/activate
+```
 
 ### Setup
 ```bash
@@ -22,9 +26,10 @@ python src/scripts/download_dataset.py
 
 ### Run experiments (main entry point)
 ```bash
-python src/scripts/run_experiments.py --config configs/experiment.yml
-# Ablation (NLP features disabled — pure topology):
-python src/scripts/run_experiments.py --config configs/experiment_ablation_no_nlp.yml
+# Full benchmark suite (RF + MLP + GNN + GAT + GIN across 3 feature settings):
+python src/scripts/run_experiments.py --config configs/benchmark_full.yml
+python src/scripts/run_experiments.py --config configs/benchmark_text_only.yml
+python src/scripts/run_experiments.py --config configs/benchmark_structural_only.yml
 ```
 
 ### XAI analysis (GNNExplainer + GAT attention)
@@ -86,25 +91,45 @@ Feature channels are **dynamically masked** at load time by `filter_features()` 
 
 Both are toggled via `use_root` / `use_depth` in the YAML `features` section.
 
+### Edge features (optional, computed at load time)
+
+`compute_edge_features()` in `src/data/dataset.py` computes per-edge attributes and stores them as `data.edge_attr`. Must be called on the **raw** dataset before `filter_features()` since it reads from the full 390-dim feature vector.
+
+- **`[0]` cos_sim**: cosine similarity between parent and child NLP embeddings — captures whether a reply is semantically aligned with its parent tweet
+- **`[1]` log1p_time_gap**: log1p(seconds from parent tweet to child tweet) — reply latency
+
+Enabled via `use_edge_features: true` in the YAML `features` section. Only `ImprovedGNN` and `ImprovedGAT` consume edge features (via `edge_dim` parameter); other models ignore `edge_attr`.
+
 ### PyG Data object custom attributes
 
 Beyond the standard `x`, `edge_index`, `y` fields, each graph carries:
 - `thread_id` — original Twitter thread ID (for XAI traceability)
 - `event` — event name used for LOEO splits
 - `text` — list of raw tweet strings per node (for interpretability without loading the gpickle)
+- `edge_attr` — per-edge feature matrix [num_edges, 2], present only when `use_edge_features: true`
 
 ### Models
 
 All models reduce to a per-graph vector then classify with a single logit:
 
-| Model | Aggregation | Classifier |
+| Model | Aggregation | Notes |
 |---|---|---|
-| `RandomForestBaseline` | mean pool → sklearn RF | RF |
-| `MLPBaseline` | mean pool → MLP | Linear |
-| `SimpleGNN` | 2× GCNConv + mean pool | Linear |
-| `GATModel` | 2× GATv2Conv (2 heads) + mean pool | Linear |
+| `RandomForestBaseline` | mean pool → sklearn RF | |
+| `MLPBaseline` | mean pool → MLP | no message passing |
+| `SimpleGNN` | 2× GCNConv + mean pool | |
+| `GATModel` | 2× GATv2Conv (2 heads) + mean pool | |
+| `ImprovedGNN` | GCNConv + skip + LayerNorm; mean pool ∥ root node | supports edge_dim |
+| `ImprovedGAT` | GATv2Conv + skip + LayerNorm; mean pool ∥ root node | supports edge_dim |
+| `GINModel` | GINConv (sum, train_eps) + LayerNorm; mean pool ∥ root node | most expressive |
 
-GATv2Conv output dim = `h_dim * heads` per layer, so each layer's output is wider than `h_dim` alone. The classifier head receives `hidden_dims[-1] * heads` features. This is handled in `src/models/gnn.py`.
+**GINModel** uses sum aggregation, which is as expressive as the Weisfeiler-Lehman graph isomorphism test. Unlike GCN's mean, sum preserves neighbour counts — letting the model distinguish "1 reply vs 10 replies", which is a direct proxy for cascade virality. This is the recommended model for graph-level classification on PHEME.
+
+`ImprovedGNN` / `ImprovedGAT` / `GINModel` share three enhancements over the base models:
+1. **Configurable edge direction** — `original` (parent→child), `inverted` (child→parent), or `bidirectional` (both); set via `edge_direction` in the YAML.
+2. **Root readout** — the classifier concatenates mean-pooled graph embedding with the root node's representation, so the source tweet's signal is never diluted by pooling.
+3. **Residual skip connections + LayerNorm** — stabilises training on shallow cascades. (`GINModel` uses LayerNorm without skip, since GINConv's internal MLP already provides depth.)
+
+When `edge_dim > 0`, `ImprovedGNN` switches from `GCNConv` to `GATv2Conv(heads=1, edge_dim=edge_dim)` to consume edge features. `ImprovedGAT` uses the native `edge_dim` parameter of `GATv2Conv`.
 
 ### Class balancing
 
@@ -112,18 +137,42 @@ GATv2Conv output dim = `h_dim * heads` per layer, so each layer's output is wide
 
 ### Experiment orchestration
 
-`configs/experiment.yml` drives everything:
-- **`preprocessing`** section: `excluded_events` list (two events excluded by default) and `min_nodes` threshold (graphs with fewer nodes are dropped)
-- **`features`** section: toggle individual feature channels on/off (including `use_root`, `use_depth`)
-- **`experiments`** section: list of models with their hyperparameters
+Each YAML config has three top-level sections:
+- **`preprocessing`**: `excluded_events` list and `min_nodes` threshold
+- **`features`**: toggle individual feature channels on/off; `use_edge_features` triggers `compute_edge_features()` before filtering
+- **`experiments`**: one block per run, each with its own model type and hyperparameters
 
-`run_experiments.py` reads the YAML, calls `load_data()` + `filter_features()` + `add_graph_features()`, then runs LOEO CV for each experiment. Results are written to timestamped CSV in `outputs/`.
+`run_experiments.py` pipeline order:
+1. `load_data()` — loads raw 390-dim dataset
+2. `compute_edge_features()` — if `use_edge_features: true` (reads raw dims before filtering)
+3. `filter_features()` — masks node feature columns per config
+4. `add_graph_features()` — appends `is_root` / `depth` if requested
+5. `preprocess_dataset()` — drops excluded events and small graphs
+6. LOEO CV loop — trains and evaluates each experiment
+
+Results are written to a timestamped CSV in `outputs/`.
 
 ### Training
 
 `src/models/trainer.py` provides:
 - `train_rf()` — for RandomForest
-- `train_nn()` — unified for MLP, GNN, and GAT; uses `BCEWithLogitsLoss`, Adam optimizer; prediction threshold is 0.5 after sigmoid
+- `train_nn()` — unified for all neural models; Adam optimiser with cosine annealing LR schedule, gradient clipping (max_norm=1.0)
+
+**Focal loss** is a per-experiment toggle: add `use_focal_loss: true` and `focal_gamma: 2.0` to any experiment block. Defaults to standard `BCEWithLogitsLoss` if omitted.
+
+**Edge features** are passed through automatically when `data.edge_attr` is present and the model is `improved_gnn` or `improved_gat`.
+
+### Benchmark configs
+
+Three configs designed for a systematic ablation of graph structure vs. text vs. topology:
+
+| Config | Features | Dim | Purpose |
+|---|---|---|---|
+| `benchmark_full.yml` | NLP + user + structural + positional | 392 | best overall features |
+| `benchmark_text_only.yml` | NLP + user only | 386 | no graph-derived features; GNN advantage = pure message passing |
+| `benchmark_structural_only.yml` | structural + positional only | 8 | no text; pure topology |
+
+Each config runs RF, MLP, GNN, GAT, and GIN, enabling a clean 5×3 comparison.
 
 ### XAI pipeline (`src/scripts/xai_analysis.py`)
 
@@ -141,6 +190,14 @@ Five independent topological analyses with Mann-Whitney U significance testing a
 4. Network robustness — LCC fraction after removing top-k degree hubs (k = 1%, 5%, 10%, …)
 5. Echo chambers — clustering coefficient and mean branching factor
 
+## Design decisions and dead ends
+
+These approaches were tried and deliberately reverted — do not re-introduce them without a clear new reason.
+
+**BERTweet embeddings (768-dim) + temporal feature**: We built a new dataset using `vinai/bertweet-base` (768-dim) and added a per-node temporal feature (log1p seconds since root tweet), yielding 775-dim node features. BERTweet added ~+3.7 F1 over MiniLM, but the temporal feature contributed negligible improvement (+0.001). More importantly, the NLP quality gain benefited MLP and GNN equally — it did not widen the gap between flat aggregation and message passing. Since the study is about graph structure, not NLP quality, a better embedding would obscure the architectural comparison. We reverted to the HuggingFace dataset (all-MiniLM-L6-v2, 390-dim) to keep the focus clean.
+
+**Edge features (cos_sim + reply latency)**: We implemented `compute_edge_features()` to add 2-dim edge attributes (cosine similarity between parent/child embeddings, log1p reply latency). The approach hurt performance (-0.069 F1). Two reasons: (1) `ImprovedGNN` with `edge_dim>0` switches from GCNConv to GATv2Conv, which changes the base architecture entirely and conflates edge feature contribution with attention mechanism contribution; (2) bidirectional edge expansion assigns the same positive time gap to reverse edges (child→parent), which is semantically wrong. The `compute_edge_features()` function remains in `dataset.py` and the `use_edge_features` config flag still works, but no benchmark config uses it.
+
 ## Key paths
 
 | Purpose | Path |
@@ -148,9 +205,8 @@ Five independent topological analyses with Mann-Whitney U significance testing a
 | Main entry point | `src/scripts/run_experiments.py` |
 | XAI analysis | `src/scripts/xai_analysis.py` |
 | Complex systems analysis | `src/scripts/complex_systems_analysis.py` |
-| Experiment config | `configs/experiment.yml` |
-| Ablation config (no NLP) | `configs/experiment_ablation_no_nlp.yml` |
-| GNN/GAT architectures | `src/models/gnn.py` |
+| Benchmark configs | `configs/benchmark_full.yml`, `benchmark_text_only.yml`, `benchmark_structural_only.yml` |
+| GNN/GAT/GIN architectures | `src/models/gnn.py` |
 | Training loop | `src/models/trainer.py` |
 | Baseline models | `src/models/baselines.py` |
 | Dataset loading + feature masking | `src/data/dataset.py` |

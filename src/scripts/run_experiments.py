@@ -11,7 +11,7 @@ from tqdm import tqdm
 # Add project root to path for imports
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
-from src.data.dataset import load_data, filter_features, add_graph_features
+from src.data.dataset import load_data, filter_features, add_graph_features, compute_edge_features
 from src.models.trainer import train_rf, train_nn
 
 def parse_args():
@@ -70,8 +70,15 @@ def main():
 
     dataset = load_data()
 
-    # Filter features dynamically from YAML
     features_config = config_data.get("features", {})
+
+    # Edge features must be computed from raw data BEFORE filter_features strips columns
+    edge_dim = 0
+    if features_config.get("use_edge_features", False):
+        compute_edge_features(dataset)
+        edge_dim = 2
+        print(f"Edge features computed (cos_sim + reply_latency) → edge_dim={edge_dim}")
+
     dataset, input_dim = filter_features(dataset, features_config)
 
     # Append positional features (is_root, depth) if requested.
@@ -111,8 +118,8 @@ def main():
             
             if model_type == "rf":
                 y_true, y_pred = train_rf(config, train_data, test_data)
-            elif model_type in ["mlp", "gnn", "gat", "improved_gnn", "improved_gat"]:
-                y_true, y_pred = train_nn(config, model_type, train_data, test_data, input_dim)
+            elif model_type in ["mlp", "gnn", "gat", "gin", "improved_gnn", "improved_gat"]:
+                y_true, y_pred = train_nn(config, model_type, train_data, test_data, input_dim, edge_dim=edge_dim)
             else:
                 raise ValueError(f"Unknown model_type: {model_type}")
                 

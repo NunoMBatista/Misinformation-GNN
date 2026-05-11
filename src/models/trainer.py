@@ -1,6 +1,7 @@
 import random
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from collections import defaultdict
 from torch_geometric.loader import DataLoader
@@ -8,7 +9,14 @@ from torch_geometric.nn import global_mean_pool
 from tqdm import tqdm
 
 # Internal imports
-from src.models import RandomForestBaseline, MLPBaseline, SimpleGNN, GATModel, ImprovedGNN, ImprovedGAT
+from src.models import RandomForestBaseline, MLPBaseline, SimpleGNN, GATModel, GINModel, ImprovedGNN, ImprovedGAT
+
+
+def focal_loss(logits, targets, gamma=2.0):
+    """Binary focal loss — down-weights easy examples, focuses on hard ones."""
+    bce = F.binary_cross_entropy_with_logits(logits, targets, reduction='none')
+    p_t = torch.sigmoid(logits) * targets + (1 - torch.sigmoid(logits)) * (1 - targets)
+    return ((1 - p_t) ** gamma * bce).mean()
 
 
 def _balance_per_event(train_data, random_state=42):
@@ -56,7 +64,7 @@ def train_rf(config, train_dataset, test_dataset):
     
     return y_test.tolist(), preds.tolist()
 
-def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
+def train_nn(config, model_name, train_dataset, test_dataset, input_dim, edge_dim=0):
     """Train and evaluate Neural Networks (MLP or GNN)."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"  [Device] Training {model_name.upper()} on: {device}")
@@ -87,12 +95,21 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
             dropout=config.get('dropout', 0.5),
         ).to(device)
         is_gnn = True
+    elif model_name == "gin":
+        model = GINModel(
+            input_dim=input_dim,
+            hidden_dims=config.get('hidden_dims', [128, 64]),
+            dropout=config.get('dropout', 0.4),
+            edge_direction=config.get('edge_direction', 'bidirectional'),
+        ).to(device)
+        is_gnn = True
     elif model_name == "improved_gnn":
         model = ImprovedGNN(
             input_dim=input_dim,
             hidden_dims=config.get('hidden_dims', [128, 64]),
             dropout=config.get('dropout', 0.4),
             edge_direction=config.get('edge_direction', 'bidirectional'),
+            edge_dim=edge_dim,
         ).to(device)
         is_gnn = True
     elif model_name == "improved_gat":
@@ -102,6 +119,7 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
             heads=config.get('heads', 2),
             dropout=config.get('dropout', 0.4),
             edge_direction=config.get('edge_direction', 'bidirectional'),
+            edge_dim=edge_dim,
         ).to(device)
         is_gnn = True
     else:
@@ -113,7 +131,8 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
         lr=lr,
         weight_decay=float(config.get('weight_decay', 0.0001))
     )
-    criterion = nn.BCEWithLogitsLoss()
+    gamma = config.get('focal_gamma', 2.0)
+    criterion = (lambda lo, tg: focal_loss(lo, tg, gamma=gamma)) if config.get('use_focal_loss', False) else nn.BCEWithLogitsLoss()
 
     epochs = config.get('epochs', 50)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr / 10)
@@ -127,7 +146,11 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
             optimizer.zero_grad()
 
             if is_gnn:
-                out = model(batch.x, batch.edge_index, batch.batch)
+                ea = getattr(batch, 'edge_attr', None)
+                if model_name in ['improved_gnn', 'improved_gat'] and ea is not None:
+                    out = model(batch.x, batch.edge_index, batch.batch, edge_attr=ea)
+                else:
+                    out = model(batch.x, batch.edge_index, batch.batch)
             else:
                 x_pooled = global_mean_pool(batch.x, batch.batch)
                 out = model(x_pooled)
@@ -148,7 +171,11 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim):
         for batch in tqdm(test_loader, desc="Evaluating", leave=False):
             batch = batch.to(device)
             if is_gnn:
-                out = model(batch.x, batch.edge_index, batch.batch)
+                ea = getattr(batch, 'edge_attr', None)
+                if model_name in ['improved_gnn', 'improved_gat'] and ea is not None:
+                    out = model(batch.x, batch.edge_index, batch.batch, edge_attr=ea)
+                else:
+                    out = model(batch.x, batch.edge_index, batch.batch)
             else:
                 x_pooled = global_mean_pool(batch.x, batch.batch)
                 out = model(x_pooled)

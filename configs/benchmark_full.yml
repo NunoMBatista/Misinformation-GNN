@@ -1,0 +1,69 @@
+preprocessing:
+  excluded_events:
+    - "prince-toronto-all-rnr-threads"
+    - "ebola-essien-all-rnr-threads"
+    - "ferguson-all-rnr-threads"
+  min_nodes: 3
+
+# Full feature set: NLP (384) + user + structural + positional = 392 dims
+features:
+  use_nlp: true
+  use_followers: true
+  use_verified: true
+  use_pagerank: true
+  use_degree: true
+  use_indegree: true
+  use_outdegree: true
+  use_root: true
+  use_depth: true
+
+experiments:
+  rf:
+    model_type: "rf"
+    n_estimators: 100
+    max_depth: 10
+    random_state: 42
+
+  mlp:
+    model_type: "mlp"
+    hidden_dims: [128, 64]
+    learning_rate: 0.001
+    epochs: 100
+    dropout: 0.5
+    weight_decay: 0.0001
+    use_focal_loss: true
+    focal_gamma: 2.0
+
+  gnn:
+    model_type: "improved_gnn"
+    edge_direction: "bidirectional"
+    hidden_dims: [128, 64]
+    learning_rate: 0.001
+    epochs: 150
+    dropout: 0.4
+    weight_decay: 0.0001
+    use_focal_loss: true
+    focal_gamma: 2.0
+
+  gat:
+    model_type: "improved_gat"
+    edge_direction: "bidirectional"
+    hidden_dims: [128, 64]
+    heads: 2
+    learning_rate: 0.001
+    epochs: 150
+    dropout: 0.4
+    weight_decay: 0.0001
+    use_focal_loss: true
+    focal_gamma: 2.0
+
+  gin:
+    model_type: "gin"
+    edge_direction: "bidirectional"
+    hidden_dims: [128, 64]
+    learning_rate: 0.001
+    epochs: 150
+    dropout: 0.4
+    weight_decay: 0.0001
+    use_focal_loss: true
+    focal_gamma: 2.0
