@@ -4,70 +4,42 @@
 \providecommand{\doi}[1]{https://doi.org/#1}
 
 \bibitem{batista2026pheme_pyg}
-Batista, N.: {PHEME}-misinformation-graphs. Zenodo (2026).
-  \doi{10.5281/zenodo.20184848}
+Batista, N.: {PHEME}-misinformation-graphs. Zenodo (2026). \doi{10.5281/zenodo.20184848}
 
 \bibitem{bian2020bigcn}
-Bian, T., Xiao, X., Xu, T., Zhao, P., Huang, W., Rong, Y., Huang, J.: Rumor
-  detection on social media with bi-directional graph convolutional networks.
-  In: Proceedings of the AAAI Conference on Artificial Intelligence. vol.~34,
-  pp. 549--556 (2020). \doi{10.1609/aaai.v34i01.5393}
+Bian, T., Xiao, X., Xu, T., Zhao, P., Huang, W., Rong, Y., Huang, J.: Rumor detection on social media with bi-directional graph convolutional networks. In: Proceedings of the AAAI Conference on Artificial Intelligence. vol.~34, pp. 549--556 (2020). \doi{10.1609/aaai.v34i01.5393}
 
 \bibitem{brody2022gatv2}
-Brody, S., Alon, U., Yahav, E.: How attentive are graph attention networks? In:
-  International Conference on Learning Representations (2022)
+Brody, S., Alon, U., Yahav, E.: How attentive are graph attention networks? In: International Conference on Learning Representations (2022)
 
 \bibitem{goel2016structural}
-Goel, S., Anderson, A., Hofman, J., Watts, D.J.: The structural virality of
-  online diffusion. Management Science  \textbf{62}(1),  180--196 (2016).
-  \doi{10.1287/mnsc.2015.2158}
+Goel, S., Anderson, A., Hofman, J., Watts, D.J.: The structural virality of online diffusion. Management Science  \textbf{62}(1),  180--196 (2016). \doi{10.1287/mnsc.2015.2158}
 
 \bibitem{kipf2017semi}
-Kipf, T.N., Welling, M.: Semi-supervised classification with graph
-  convolutional networks. In: International Conference on Learning
-  Representations (2017)
+Kipf, T.N., Welling, M.: Semi-supervised classification with graph convolutional networks. In: International Conference on Learning Representations (2017)
 
 \bibitem{lin2017focal}
-Lin, T.Y., Goyal, P., Girshick, R., He, K., Doll{\'a}r, P.: Focal loss for
-  dense object detection. In: Proceedings of the IEEE International Conference
-  on Computer Vision. pp. 2980--2988 (2017)
+Lin, T.Y., Goyal, P., Girshick, R., He, K., Doll{\'a}r, P.: Focal loss for dense object detection. In: Proceedings of the IEEE International Conference on Computer Vision. pp. 2980--2988 (2017)
 
 \bibitem{lu2020gcan}
-Lu, Y.J., Li, C.T.: {GCAN}: Graph-aware co-attention networks for explainable
-  fake news detection on social media. In: Proceedings of the 58th Annual
-  Meeting of the Association for Computational Linguistics. pp. 505--514
-  (2020). \doi{10.18653/v1/2020.acl-main.48}
+Lu, Y.J., Li, C.T.: {GCAN}: Graph-aware co-attention networks for explainable fake news detection on social media. In: Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics. pp. 505--514 (2020). \doi{10.18653/v1/2020.acl-main.48}
 
 \bibitem{monti2019fakenews}
-Monti, F., Frasca, F., Eynard, D., Mannion, D., Bronstein, M.M.: Fake news
-  detection on social media using geometric deep learning. arXiv preprint
-  arXiv:1902.06673  (2019)
+Monti, F., Frasca, F., Eynard, D., Mannion, D., Bronstein, M.M.: Fake news detection on social media using geometric deep learning. arXiv preprint arXiv:1902.06673  (2019)
 
 \bibitem{reimers2019sbert}
-Reimers, N., Gurevych, I.: Sentence-{BERT}: Sentence embeddings using siamese
-  {BERT}-networks. In: Proceedings of the 2019 Conference on Empirical Methods
-  in Natural Language Processing. pp. 3982--3992 (2019).
-  \doi{10.18653/v1/D19-1410}
+Reimers, N., Gurevych, I.: Sentence-{BERT}: Sentence embeddings using siamese {BERT}-networks. In: Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing. pp. 3982--3992 (2019). \doi{10.18653/v1/D19-1410}
 
 \bibitem{velickovic2018gat}
-Veli{\v{c}}kovi{\'{c}}, P., Cucurull, G., Casanova, A., Romero, A., Li{\`{o}},
-  P., Bengio, Y.: Graph attention networks. In: International Conference on
-  Learning Representations (2018)
+Veli{\v{c}}kovi{\'{c}}, P., Cucurull, G., Casanova, A., Romero, A., Li{\`{o}}, P., Bengio, Y.: Graph attention networks. In: International Conference on Learning Representations (2018)
 
 \bibitem{vosoughi2018spread}
-Vosoughi, S., Roy, D., Aral, S.: The spread of true and false news online.
-  Science  \textbf{359}(6380),  1146--1151 (2018).
-  \doi{10.1126/science.aap9559}
+Vosoughi, S., Roy, D., Aral, S.: The spread of true and false news online. Science  \textbf{359}(6380),  1146--1151 (2018). \doi{10.1126/science.aap9559}
 
 \bibitem{ying2019gnnexplainer}
-Ying, Z., Bourgeois, D., You, J., Zitnik, M., Leskovec, J.: {GNNExplainer}:
-  Generating explanations for graph neural networks. In: Advances in Neural
-  Information Processing Systems. vol.~32 (2019)
+Ying, Z., Bourgeois, D., You, J., Zitnik, M., Leskovec, J.: {GNNExplainer}: Generating explanations for graph neural networks. In: Advances in Neural Information Processing Systems. vol.~32 (2019)
 
 \bibitem{zubiaga2016pheme}
-Zubiaga, A., Wong Sak~Hoi, G., Liakata, M., Procter, R., Tolmie, P.: Analysing
-  how people orient to and spread rumours in social media by looking at
-  conversational threads. PLOS ONE  \textbf{11}(3),  e0150989 (2016).
-  \doi{10.1371/journal.pone.0150989}
+Zubiaga, A., Wong Sak~Hoi, G., Liakata, M., Procter, R., Tolmie, P.: Analysing how people orient to and spread rumours in social media by looking at conversational threads. PLOS ONE  \textbf{11}(3),  e0150989 (2016). \doi{10.1371/journal.pone.0150989}
 
 \end{thebibliography}

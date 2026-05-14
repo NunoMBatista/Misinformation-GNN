@@ -353,8 +353,7 @@ Section~\ref{sec:results}).
 \paragraph{Cascade size and depth.}
 Rumour cascades are significantly smaller (mean 13.89 nodes vs.\ 18.00;
 Spearman $\rho = -0.119$, $p < 0.001$) and shallower (mean depth 1.257
-vs.\ 1.528; $\rho = -0.102$, $p < 0.001$). Both effects are statistically
-robust at $n = 6{,}425$ but small in magnitude.
+vs.\ 1.528; $\rho = -0.102$, $p < 0.001$), with small effect sizes.
 
 \paragraph{Tipping point.}
 Stratifying by cascade size reveals a tipping-point pattern: rumour prevalence
@@ -368,13 +367,11 @@ as the average pairwise path length (APL) in the cascade tree. Rumour cascades
 have significantly lower APL (mean 2.463 vs.\ 2.808, $p < 0.001$, $r = 0.114$),
 confirming a structurally more star-like topology (replies cluster around the root)
 while non-rumour cascades exhibit longer information chains consistent with viral
-diffusion. The effect is small.
+diffusion.
 
 \paragraph{Network robustness and echo chambers.}
 Robustness is measured by tracking the largest connected component fraction after
-removing the top 1\%--30\% of degree-ranked hubs. Both classes show near-identical
-curves, differing by at most 0.014 at any removal rate, with the curves crossing at
-10\% removal. The branching factor (mean out-degree of internal nodes) is also
+removing the top 1\%--30\% of degree-ranked hubs. Both classes show near-identical curves, differing by at most 0.014 at any removal rate. The branching factor (mean out-degree of internal nodes) is also
 indistinguishable between classes ($p = 0.650$, $r = 0.007$).
 
 \paragraph{Novel topological metrics.}
@@ -417,15 +414,9 @@ Epidemic $R_0$   & 4.214 & 4.469 & 0.081    & 0.028 & ns  \\
 \section{Classification Results}
 \label{sec:results}
 
-We evaluate four classifiers under three feature configurations on the fixed held-out
-test set (charliehebdo, 1{,}952 graphs; sydneysiege, 1{,}154 graphs; 3{,}106
-combined). The random-classifier lower bound (predict-all-positive at $p = 0.5$)
-gives a combined macro F1 of 0.375. All neural models are trained with the
-best hyperparameters found during the search phase, which excluded the two test
-events entirely.
-
-Table~\ref{tab:results} reports per-event and combined macro F1 for the six
-relevant model-configuration pairs.
+We evaluate four classifiers under three feature configurations on the held-out
+test set (3{,}106 graphs). The random-classifier lower bound is macro F1 = 0.375;
+Table~\ref{tab:results} reports full results.
 
 \begin{table}[t]
 \caption{Final held-out evaluation. Models are trained on four events and tested on
@@ -453,33 +444,23 @@ GAT  & struct & 0.152 & 0.247 & 0.200 & 0.666 & $-$0.175 \\
 \end{table}
 
 \paragraph{Structural-only models.}
-All three structural-only classifiers fall below the random lower bound (combined
-F1 of 0.200--0.303 vs.\ 0.375). This confirms the finding from
-Section~\ref{sec:topology}: the topological differences identified between classes
-are real but too small to support cross-event generalisation.
+All three structural-only classifiers fall below the random lower bound
+(F1 = 0.200--0.303 vs.\ 0.375): topology alone does not generalise across events.
 
 \paragraph{Text and full-feature models.}
 All six text and full-feature models exceed the lower bound by comfortable margins
 (+0.145 to +0.235). GAT with text features achieves the best combined F1 of
-0.610. Adding structural and positional features to the text-based models
-consistently hurts generalisation: both GAT (0.610 $\to$ 0.565) and GCN
-(0.551 $\to$ 0.548) perform worse in the full configuration.
-The structural features overfit the training event distributions and do not
-transfer to the two test events.
+0.610. Adding structural features consistently hurts generalisation: GAT drops from
+0.610 to 0.565 and GCN from 0.551 to 0.548 in the full configuration.
 
 \paragraph{Statistical tests.}
 Bootstrap 95\% CIs for the top four models (GAT-text [0.583, 0.636], GAT-full
 [0.540, 0.590], GCN-text [0.526, 0.576], GCN-full [0.521, 0.573]) all exclude
 the random lower bound, confirming significance above chance.
-All pairwise comparisons on the combined 3{,}106-prediction test set are
-significant at $p < 0.001$. Message passing beats flat MLP in both feature
-settings, confirming that cascade graph structure provides genuine signal
-beyond mean-pooled embeddings. Attention (GAT) beats GCN in both settings,
-justifying the added mechanism complexity. Adding structural features
-significantly hurts both GCN and GAT, indicating that topology encodes
-event-specific rather than event-general patterns. The GNN-MLP F1 margin is
-modest (+0.031 for text, +0.027 for full), suggesting NLP embeddings carry
-the bulk of the discriminative signal.
+All pairwise McNemar comparisons ($p < 0.001$): message passing beats MLP,
+GAT beats GCN, and adding structural features hurts both GCN and GAT.
+The GNN-MLP F1 margin is modest (+0.031 text, +0.027 full), suggesting NLP
+embeddings carry the bulk of the discriminative signal.
 
 \section{XAI Analysis}
 \label{sec:xai}
