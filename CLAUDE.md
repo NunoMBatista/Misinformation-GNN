@@ -32,6 +32,30 @@ python src/scripts/run_experiments.py --config configs/benchmark_text_only.yml
 python src/scripts/run_experiments.py --config configs/benchmark_structural_only.yml
 ```
 
+### Hyperparameter search (Claude Code as search loop)
+`hp_search.py` runs one trial at a time; Claude Code reads the F1 output and supplies the next `--hparams` JSON, accumulating results in a `.jsonl` log.
+```bash
+# Random warmup trial:
+python src/scripts/hp_search.py --model gin --config configs/benchmark_full.yml \
+    --random --session my_session --trial 1
+
+# Guided trial (Claude supplies hparams):
+python src/scripts/hp_search.py --model gin --config configs/benchmark_full.yml \
+    --hparams '{"learning_rate":0.0008,...}' --session my_session --trial 2
+
+# Inspect the search space for a model+config:
+python src/scripts/hp_search.py --model gin --config configs/benchmark_full.yml --show-space
+
+# Promote best trial to best_configs.json:
+python src/scripts/update_best_configs.py \
+    --key gin_full --session my_session --model gin --config configs/benchmark_full.yml
+
+# Final held-out evaluation (reads best_configs.json, trains on 4 events, tests on 2):
+python src/scripts/final_eval.py
+```
+
+Logs written to `outputs/hp_search/<model>_<session>.jsonl`; best configs aggregated in `outputs/hp_search/best_configs.json`.
+
 ### XAI analysis (GNNExplainer + GAT attention)
 ```bash
 python src/scripts/xai_analysis.py   # outputs to outputs/xai/
@@ -135,6 +159,19 @@ When `edge_dim > 0`, `ImprovedGNN` switches from `GCNConv` to `GATv2Conv(heads=1
 
 `_balance_per_event()` in `src/models/trainer.py` undersamples the majority class **within each event** before training, so no single event's class imbalance dominates training. This runs automatically inside `train_rf()` and `train_nn()`.
 
+### Evaluation design (fixed train/test split)
+
+The project uses a **fixed split**, not a full LOEO rotation, for the final evaluation:
+
+| Role | Events |
+|---|---|
+| Training (HP search + final train) | germanwings, gurlitt, ottawashooting, putinmissing |
+| Held-out test (never seen during HP search) | charliehebdo, sydneysiege |
+| Excluded (near single-class) | prince-toronto (98.3% R), ebola-essien (100% R) |
+| Excluded from main eval (distribution shift) | ferguson |
+
+`run_experiments.py` still does LOEO over whatever events remain after `excluded_events` filtering. `final_eval.py` enforces the split above via hard-coded `TRAIN_EVENTS` / `TEST_EVENTS` constants and reads best hyperparameters from `outputs/hp_search/best_configs.json`.
+
 ### Experiment orchestration
 
 Each YAML config has three top-level sections:
@@ -183,18 +220,21 @@ Trains both SimpleGNN and GATModel fresh on charliehebdo as the held-out test ev
 
 ### Complex systems analysis (`src/scripts/complex_systems_analysis.py`)
 
-Five independent topological analyses with Mann-Whitney U significance testing and `rank_biserial` effect sizes:
+Six independent topological analyses with Mann-Whitney U significance testing and `rank_biserial` effect sizes:
 1. Cascade size and mean depth vs. rumour label (Spearman correlation)
 2. Tipping point — rumour ratio across 7 cascade-size bins
 3. Structural virality — average path length on largest connected component
 4. Network robustness — LCC fraction after removing top-k degree hubs (k = 1%, 5%, 10%, …)
 5. Echo chambers — clustering coefficient and mean branching factor
+6. Novel topological metrics — Epidemic R₀, Root Dominance, Gini out-degree, Strahler Number, Leaf Ratio, Normalised Depth
 
 ## Design decisions and dead ends
 
 These approaches were tried and deliberately reverted — do not re-introduce them without a clear new reason.
 
 **BERTweet embeddings (768-dim) + temporal feature**: We built a new dataset using `vinai/bertweet-base` (768-dim) and added a per-node temporal feature (log1p seconds since root tweet), yielding 775-dim node features. BERTweet added ~+3.7 F1 over MiniLM, but the temporal feature contributed negligible improvement (+0.001). More importantly, the NLP quality gain benefited MLP and GNN equally — it did not widen the gap between flat aggregation and message passing. Since the study is about graph structure, not NLP quality, a better embedding would obscure the architectural comparison. We reverted to the HuggingFace dataset (all-MiniLM-L6-v2, 390-dim) to keep the focus clean.
+
+**GIN overfits on text features**: In held-out evaluation, `GINModel` collapses on charliehebdo (F1 = 0.000, predicts all-negative in the text-only setting) and barely beats the random lower bound for full features (+0.003). Sum aggregation makes GIN sensitive to the absolute degree distribution, which shifts across events. Use `ImprovedGAT` or `ImprovedGNN` as the primary model for held-out generalisation; GIN is useful only as an upper bound on training-fold performance. Do not treat GIN's strong validation F1 (0.680) as reliable without held-out confirmation.
 
 **Edge features (cos_sim + reply latency)**: We implemented `compute_edge_features()` to add 2-dim edge attributes (cosine similarity between parent/child embeddings, log1p reply latency). The approach hurt performance (-0.069 F1). Two reasons: (1) `ImprovedGNN` with `edge_dim>0` switches from GCNConv to GATv2Conv, which changes the base architecture entirely and conflates edge feature contribution with attention mechanism contribution; (2) bidirectional edge expansion assigns the same positive time gap to reverse edges (child→parent), which is semantically wrong. The `compute_edge_features()` function remains in `dataset.py` and the `use_edge_features` config flag still works, but no benchmark config uses it.
 
@@ -203,6 +243,10 @@ These approaches were tried and deliberately reverted — do not re-introduce th
 | Purpose | Path |
 |---|---|
 | Main entry point | `src/scripts/run_experiments.py` |
+| HP search (one trial) | `src/scripts/hp_search.py` |
+| Promote best HP trial | `src/scripts/update_best_configs.py` |
+| Final held-out evaluation | `src/scripts/final_eval.py` |
+| Best HP configs | `outputs/hp_search/best_configs.json` |
 | XAI analysis | `src/scripts/xai_analysis.py` |
 | Complex systems analysis | `src/scripts/complex_systems_analysis.py` |
 | Benchmark configs | `configs/benchmark_full.yml`, `benchmark_text_only.yml`, `benchmark_structural_only.yml` |
@@ -211,4 +255,5 @@ These approaches were tried and deliberately reverted — do not re-introduce th
 | Baseline models | `src/models/baselines.py` |
 | Dataset loading + feature masking | `src/data/dataset.py` |
 | Full preprocessing pipeline | `src/data/builder/preprocessing_pipeline.py` |
+| Experimental results | `docs/results.md` |
 | HuggingFace dataset | `NunoBatista/PHEME-Misinformation-Graphs` |
