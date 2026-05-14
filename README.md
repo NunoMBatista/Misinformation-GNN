@@ -1,18 +1,4 @@
----
-license: mit
-language:
-- en
-task_categories:
-- graph-ml
-- text-classification
-tags:
-- misinformation
-- PyTorch Geometric
-- NetworkX
-- rumour-detection
-- complex-systems
-viewer: false
----
+
 # Misinformation-GNN
 
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Dataset-blue)](https://huggingface.co/datasets/NunoBatista/PHEME-Misinformation-Graphs)
