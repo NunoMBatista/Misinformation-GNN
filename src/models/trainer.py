@@ -8,6 +8,11 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import global_mean_pool
 from tqdm import tqdm
 
+try:
+    import wandb as _wandb
+except ImportError:
+    _wandb = None
+
 # Internal imports
 from src.models import RandomForestBaseline, MLPBaseline, SimpleGNN, GATModel, GINModel, ImprovedGNN, ImprovedGAT
 
@@ -64,7 +69,7 @@ def train_rf(config, train_dataset, test_dataset):
     
     return y_test.tolist(), preds.tolist()
 
-def train_nn(config, model_name, train_dataset, test_dataset, input_dim, edge_dim=0):
+def train_nn(config, model_name, train_dataset, test_dataset, input_dim, edge_dim=0, fold_name=None):
     """Train and evaluate Neural Networks (MLP or GNN)."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"  [Device] Training {model_name.upper()} on: {device}")
@@ -162,7 +167,11 @@ def train_nn(config, model_name, train_dataset, test_dataset, input_dim, edge_di
             epoch_loss += loss.item()
 
         scheduler.step()
-        pbar.set_postfix(loss=f"{epoch_loss/len(train_loader):.4f}")
+        avg_loss = epoch_loss / len(train_loader)
+        pbar.set_postfix(loss=f"{avg_loss:.4f}")
+        if _wandb is not None and _wandb.run is not None:
+            prefix = f"fold/{fold_name}/" if fold_name else "train/"
+            _wandb.log({f"{prefix}loss": avg_loss, f"{prefix}lr": scheduler.get_last_lr()[0]})
             
     # Evaluation
     model.eval()

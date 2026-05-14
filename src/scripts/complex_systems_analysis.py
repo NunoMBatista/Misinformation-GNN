@@ -82,11 +82,14 @@ def analysis_depth_size_correlation(graphs):
 
     r_size,  p_size  = stats.spearmanr(sizes,  labels)
     r_depth, p_depth = stats.spearmanr(depths, labels)
-    print(f"  Size  vs Label: rho={r_size:.3f},  p={p_size:.4f}")
-    print(f"  Depth vs Label: rho={r_depth:.3f}, p={p_depth:.4f}")
-
-    mask_r  = labels == 1
-    mask_nr = labels == 0
+    mask_r  = np.array(labels) == 1
+    mask_nr = np.array(labels) == 0
+    print(f"  Size  Rumour:    mean={sizes[mask_r].mean():.2f},  median={np.median(sizes[mask_r]):.1f}")
+    print(f"  Size  Non-R:     mean={sizes[mask_nr].mean():.2f}, median={np.median(sizes[mask_nr]):.1f}")
+    print(f"  Size  vs Label:  rho={r_size:.3f}, p={p_size:.4f}")
+    print(f"  Depth Rumour:    mean={depths[mask_r].mean():.3f}, median={np.median(depths[mask_r]):.3f}")
+    print(f"  Depth Non-R:     mean={depths[mask_nr].mean():.3f}, median={np.median(depths[mask_nr]):.3f}")
+    print(f"  Depth vs Label:  rho={r_depth:.3f}, p={p_depth:.4f}")
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     fig.suptitle("Cascade Depth & Size by Label", fontsize=13, fontweight="bold")
@@ -291,56 +294,213 @@ def analysis_robustness(graphs, fractions=None):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def analysis_echo_chambers(graphs):
-    print("\nEcho Chambers (Clustering Coefficient & Branching Factor)")
+    print("\nEcho Chambers (Branching Factor)")
 
     records = []
     for G, label, _ in graphs:
         if G.number_of_nodes() < 3:
             continue
-        G_ud = G.to_undirected()
-        cc = nx.average_clustering(G_ud)
         out_degs = [d for _, d in G.out_degree() if d > 0]
         branching = float(np.mean(out_degs)) if out_degs else 0.0
-        records.append({"clustering": cc, "branching": branching, "label": label})
+        records.append({"branching": branching, "label": label})
 
     df = pd.DataFrame(records)
     rumour     = df[df["label"] == 1]
     non_rumour = df[df["label"] == 0]
 
     n_r, n_nr = len(rumour), len(non_rumour)
-    for metric in ["clustering", "branching"]:
-        U, p = stats.mannwhitneyu(rumour[metric], non_rumour[metric], alternative="two-sided")
-        r = rank_biserial(U, n_r, n_nr)
-        print(f"  {metric.capitalize():12s}  Rumour={rumour[metric].mean():.4f}, "
-              f"Non-Rumour={non_rumour[metric].mean():.4f}, p={p:.4f}, r={r:.3f}")
+    U, p = stats.mannwhitneyu(rumour["branching"], non_rumour["branching"], alternative="two-sided")
+    r = rank_biserial(U, n_r, n_nr)
+    print(f"  Branching     Rumour={rumour['branching'].mean():.4f}, "
+          f"Non-Rumour={non_rumour['branching'].mean():.4f}, p={p:.4f}, r={r:.3f}")
 
-    note = (
-        "Note: cascade graphs are near-trees, so clustering ≈ 0 is expected.\n"
-        "Branching factor (mean out-degree of non-leaf nodes) is the more informative proxy.\n"
-        "r interpretation: 0.1=small, 0.3=medium, 0.5=large effect."
-    )
-    print(f"  {note}")
-
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    fig.suptitle("Echo Chambers: Clustering & Branching Factor",
+    fig, ax = plt.subplots(figsize=(6, 5))
+    fig.suptitle("Echo Chambers: Branching Factor",
                  fontsize=13, fontweight="bold")
 
-    for ax, metric, ylabel in [
-        (axes[0], "clustering", "Avg Clustering Coefficient"),
-        (axes[1], "branching",  "Mean Branching Factor"),
-    ]:
-        U, p = stats.mannwhitneyu(rumour[metric], non_rumour[metric], alternative="two-sided")
-        r = rank_biserial(U, n_r, n_nr)
-        coloured_boxplot(
-            ax, non_rumour[metric], rumour[metric],
-            ylabel, f"{ylabel}\n(Mann-Whitney p={p:.4f}, r={r:.3f})"
-        )
+    coloured_boxplot(
+        ax, non_rumour["branching"], rumour["branching"],
+        "Mean Branching Factor",
+        f"Mean Branching Factor\n(Mann-Whitney p={p:.4f}, r={r:.3f})"
+    )
 
     plt.tight_layout()
     out = OUTPUT_DIR / "echo_chambers.png"
     plt.savefig(out, dpi=150)
     plt.close()
     print(f"  Saved: {out}")
+
+    return df
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# New Metrics
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Each metric is a scalar computed per cascade graph and then compared between
+# Rumour and Non-Rumour classes via Mann-Whitney U + rank-biserial effect size.
+# All metrics are size-normalised or inherently scale-invariant to avoid the
+# confound that plagued the original analyses.
+#
+# Course connections:
+#   Epidemic R₀          → Network Dynamics (SIS epidemic model)
+#   Root Dominance        → Network Topology (broadcast vs. viral spreading)
+#   Gini Out-Degree       → Network Science (scale-free / preferential attachment)
+#   Strahler Number       → Fractal Theory (self-similar branching complexity)
+#   Leaf Ratio            → Graph / Tree structure
+#   Normalised Depth      → Network Science (small-world log-diameter baseline)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _epidemic_r0(G):
+    """Mean out-degree of internal nodes only (those with at least one reply).
+    Directly maps to the branching ratio R₀ of the SIS/epidemic cascade model:
+    R₀ > 1 → super-critical (growing cascade); R₀ < 1 → sub-critical (dying)."""
+    internal = [d for _, d in G.out_degree() if d > 0]
+    return float(np.mean(internal)) if internal else np.nan
+
+
+def _root_dominance(G, root=0):
+    """Fraction of all edges that originate from the root tweet.
+    Value near 1 → star / broadcast (one source drives everything).
+    Value near 0 → peer-to-peer viral chain.
+    Size-invariant by construction."""
+    m = G.number_of_edges()
+    if m == 0:
+        return np.nan
+    return G.out_degree(root) / m
+
+
+def _gini_out_degree(G):
+    """Gini coefficient of the out-degree distribution.
+    0 = perfectly equal attention across all tweets.
+    1 = one tweet attracted all replies (maximum concentration).
+    Captures whether spreading follows a scale-free (rich-get-richer) pattern."""
+    arr = np.array([d for _, d in G.out_degree()], dtype=float)
+    if arr.sum() == 0:
+        return 0.0
+    arr = np.sort(arr)
+    n = len(arr)
+    index = np.arange(1, n + 1)
+    return float((2.0 * np.dot(index, arr) / (n * arr.sum())) - (n + 1) / n)
+
+
+def _strahler(G, root=0):
+    """Horton-Strahler order: a fractal-theoretic measure of branching complexity.
+    Defined recursively on trees:
+      - Leaf → order 1
+      - Internal node → max(children orders), incremented by 1 if two or more
+        children share that maximum (i.e. balanced branching detected).
+    Higher order = more complex, self-similar branching structure.
+    Implemented iteratively (post-order DFS) to avoid recursion limits."""
+    if G.number_of_nodes() <= 1:
+        return 1
+    order = {}
+    visited = set()
+    stack = [(root, False)]
+    while stack:
+        node, processed = stack.pop()
+        if processed:
+            child_orders = [order[c] for c in G.successors(node) if c in order]
+            if not child_orders:
+                order[node] = 1
+            else:
+                mx = max(child_orders)
+                order[node] = mx + 1 if child_orders.count(mx) >= 2 else mx
+        elif node not in visited:
+            visited.add(node)
+            stack.append((node, True))
+            for child in G.successors(node):
+                if child not in visited:
+                    stack.append((child, False))
+    return order.get(root, 1)
+
+
+def _leaf_ratio(G):
+    """Fraction of nodes that are leaves (out-degree == 0).
+    High → flat/broad cascade (many dead-end replies, little re-engagement).
+    Low  → deep recursive cascade (replies spawn further replies)."""
+    n = G.number_of_nodes()
+    if n == 0:
+        return np.nan
+    leaves = sum(1 for _, d in G.out_degree() if d == 0)
+    return leaves / n
+
+
+def _norm_depth(G, root=0):
+    """Max depth normalised by log₂(n).
+    A perfectly balanced binary tree scores exactly 1.0.
+    Score > 1 → chain-like (deeper than expected for its size).
+    Score < 1 → unusually flat/broad for its size.
+    Removes the raw size confound that breaks unnormalised depth comparisons."""
+    n = G.number_of_nodes()
+    if n <= 1:
+        return 0.0
+    try:
+        lengths = nx.single_source_shortest_path_length(G, root)
+        max_d = max(lengths.values())
+    except Exception:
+        return np.nan
+    return max_d / np.log2(n)
+
+
+# Ordered registry used by the analysis function and the plot loop
+_NEW_METRICS = [
+    ("r0",         "Epidemic R₀ (branching ratio)",      _epidemic_r0),
+    ("root_dom",   "Root Dominance (broadcast index)",   _root_dominance),
+    ("gini",       "Gini (out-degree inequality)",        _gini_out_degree),
+    ("strahler",   "Strahler Number (tree complexity)",  _strahler),
+    ("leaf_ratio", "Leaf Ratio",                          _leaf_ratio),
+    ("norm_depth", "Normalised Depth (depth / log₂ n)",  _norm_depth),
+]
+
+
+def analysis_new_metrics(graphs):
+    print("\nNew Graph Metrics Analysis")
+
+    records = []
+    for G, label, event in graphs:
+        row = {"label": label, "event": event}
+        for key, _, fn in _NEW_METRICS:
+            try:
+                row[key] = fn(G)
+            except Exception:
+                row[key] = np.nan
+        records.append(row)
+
+    df = pd.DataFrame(records)
+
+    rumour     = df[df["label"] == 1]
+    non_rumour = df[df["label"] == 0]
+    n_r, n_nr  = len(rumour), len(non_rumour)
+
+    print(f"\n  {'Metric':<42} {'R mean':>8} {'NR mean':>8}  {'p-value':>8}  {'r':>6}  Sig")
+    print(f"  {'-'*42} {'-'*8} {'-'*8}  {'-'*8}  {'-'*6}  ---")
+    for key, label_str, _ in _NEW_METRICS:
+        r_vals  = rumour[key].dropna()
+        nr_vals = non_rumour[key].dropna()
+        if len(r_vals) < 2 or len(nr_vals) < 2:
+            continue
+        U, p = stats.mannwhitneyu(r_vals, nr_vals, alternative="two-sided")
+        r_eff = rank_biserial(U, len(r_vals), len(nr_vals))
+        sig = "***" if p < 0.001 else ("**" if p < 0.01 else ("*" if p < 0.05 else ""))
+        print(f"  {label_str:<42} {r_vals.mean():>8.3f} {nr_vals.mean():>8.3f}  {p:>8.4f}  {r_eff:>6.3f}  {sig}")
+
+    # 2×3 grid of box plots
+    fig, axes = plt.subplots(2, 3, figsize=(16, 9))
+    fig.suptitle("New Graph Metrics: Rumour vs Non-Rumour", fontsize=14, fontweight="bold")
+    for ax, (key, label_str, _) in zip(axes.flatten(), _NEW_METRICS):
+        r_vals  = rumour[key].dropna()
+        nr_vals = non_rumour[key].dropna()
+        U, p    = stats.mannwhitneyu(r_vals, nr_vals, alternative="two-sided")
+        r_eff   = rank_biserial(U, len(r_vals), len(nr_vals))
+        coloured_boxplot(ax, nr_vals, r_vals, label_str,
+                         f"{label_str}\np={p:.4f}, r={r_eff:.3f}")
+
+    plt.tight_layout()
+    out = OUTPUT_DIR / "new_metrics.png"
+    plt.savefig(out, dpi=150)
+    plt.close()
+    print(f"\n  Saved: {out}")
 
     return df
 
@@ -364,6 +524,7 @@ def main():
     analysis_structural_virality(graphs)
     analysis_robustness(graphs)
     analysis_echo_chambers(graphs)
+    analysis_new_metrics(graphs)
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     print(f"\nAll outputs written to: {OUTPUT_DIR}/  (run at {timestamp})")

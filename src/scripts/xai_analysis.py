@@ -165,7 +165,13 @@ def run_gnnexplainer(gcn, test_data, input_dim, device):
     feat_by_label  = defaultdict(list)   # class label → list of [input_dim] importance arrays
     depth_node_imp = defaultdict(list)   # depth → list of mean node importances
 
-    subset = test_data[:MAX_EXPLAIN]
+    # Balanced sample: equal Rumour / Non-Rumour so per-class stats are fair
+    import random as _random
+    _rng = _random.Random(SEED)
+    _rumour    = [d for d in test_data if int(d.y.item()) == 1]
+    _nonrumour = [d for d in test_data if int(d.y.item()) == 0]
+    _n = min(MAX_EXPLAIN // 2, len(_rumour), len(_nonrumour))
+    subset = _rng.sample(_rumour, _n) + _rng.sample(_nonrumour, _n)
     for i, data in enumerate(subset):
         print(f"  GNNExplainer {i+1}/{len(subset)}", end="\r")
 
@@ -427,13 +433,13 @@ def main():
     gcn = SimpleGNN(input_dim, HIDDEN_DIMS, DROPOUT).to(device)
     gcn = train_model(gcn, train_data, device)
     acc, f1 = evaluate(gcn, test_data, device)
-    print(f"  GCN test  →  Acc: {acc:.4f}  F1: {f1:.4f}")
+    print(f"  GCN test  ->  Acc: {acc:.4f}  F1: {f1:.4f}")
 
     print("Training GAT...")
     gat = GATModel(input_dim, HIDDEN_DIMS, HEADS, DROPOUT).to(device)
     gat = train_model(gat, train_data, device)
     acc, f1 = evaluate(gat, test_data, device)
-    print(f"  GAT test  →  Acc: {acc:.4f}  F1: {f1:.4f}")
+    print(f"  GAT test  ->  Acc: {acc:.4f}  F1: {f1:.4f}")
 
     # ── GNNExplainer ──────────────────────────────────────────────────────────
     print(f"\n[1/2] GNNExplainer on {min(MAX_EXPLAIN, len(test_data))} test graphs...")
@@ -455,6 +461,25 @@ def main():
         for g, idx in FEATURE_GROUPS.items():
             print(f"    {g:<20} {float(mean_mask[idx].mean()):.5f}")
 
+    # Mann-Whitney U per feature group: Rumour vs Non-Rumour importance
+    from scipy.stats import mannwhitneyu as _mwu, rankdata as _rd
+    def _rank_biserial(u, n1, n2):
+        return 1 - (2 * u) / (n1 * n2)
+
+    if "Rumour" in feat_by_label and "Non-Rumour" in feat_by_label:
+        r_arr  = np.array(feat_by_label["Rumour"])    # [n_r, 390]
+        nr_arr = np.array(feat_by_label["Non-Rumour"])# [n_nr, 390]
+        print("\nGCN feature group importance: Mann-Whitney U (Rumour vs Non-Rumour)")
+        print(f"  {'Group':<20}  {'R mean':>7}  {'NR mean':>7}  {'p-value':>8}  {'r':>6}  Sig")
+        print(f"  {'-'*20}  {'-'*7}  {'-'*7}  {'-'*8}  {'-'*6}  ---")
+        for g, idx in FEATURE_GROUPS.items():
+            r_vals  = r_arr[:, idx].mean(axis=1)
+            nr_vals = nr_arr[:, idx].mean(axis=1)
+            u_stat, p = _mwu(r_vals, nr_vals, alternative="two-sided")
+            r_val = _rank_biserial(u_stat, len(r_vals), len(nr_vals))
+            sig = "***" if p < 0.001 else ("**" if p < 0.01 else ("*" if p < 0.05 else "ns"))
+            print(f"  {g:<20}  {r_vals.mean():>7.4f}  {nr_vals.mean():>7.4f}  {p:>8.4f}  {r_val:>6.3f}  {sig}")
+
     # ── GAT Attention ─────────────────────────────────────────────────────────
     print(f"\n[2/2] Extracting GAT attention from all {len(test_data)} test graphs...")
     attn_df = build_attention_df(gat, test_data, device)
@@ -471,6 +496,22 @@ def main():
         .round(4)
     )
     print(depth_summary.to_string())
+
+    # Mann-Whitney U per depth: do Rumour and Non-Rumour attention differ at each depth?
+    from scipy.stats import mannwhitneyu as _mwu2
+    layer2_depth = attn_df[(attn_df["layer"] == 2) & (attn_df["depth"] >= 0) & (attn_df["depth"] <= 6)]
+    print("\nGAT layer-2 attention per depth: Mann-Whitney U (Rumour vs Non-Rumour)")
+    print(f"  {'Depth':>5}  {'R mean':>7}  {'NR mean':>7}  {'p-value':>8}  {'r':>6}  Sig")
+    print(f"  {'-'*5}  {'-'*7}  {'-'*7}  {'-'*8}  {'-'*6}  ---")
+    for depth in sorted(layer2_depth["depth"].unique()):
+        r_vals  = layer2_depth[(layer2_depth["label"] == "Rumour")     & (layer2_depth["depth"] == depth)]["attn"].dropna().values
+        nr_vals = layer2_depth[(layer2_depth["label"] == "Non-Rumour") & (layer2_depth["depth"] == depth)]["attn"].dropna().values
+        if len(r_vals) < 2 or len(nr_vals) < 2:
+            continue
+        u_stat, p = _mwu2(r_vals, nr_vals, alternative="two-sided")
+        r_val = 1 - (2 * u_stat) / (len(r_vals) * len(nr_vals))
+        sig = "***" if p < 0.001 else ("**" if p < 0.01 else ("*" if p < 0.05 else "ns"))
+        print(f"  {depth:>5}  {r_vals.mean():>7.4f}  {nr_vals.mean():>7.4f}  {p:>8.4f}  {r_val:>6.3f}  {sig}")
 
     print(f"\nGAT attention entropy (layer 2):")
     print(ent_df.groupby("label")["entropy"].agg(["mean", "median", "std"]).round(4).to_string())

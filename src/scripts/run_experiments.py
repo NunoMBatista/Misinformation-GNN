@@ -1,4 +1,5 @@
 import argparse
+import os
 import yaml
 import datetime
 import pandas as pd
@@ -7,6 +8,17 @@ from collections import defaultdict
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 import sys
 from tqdm import tqdm
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+try:
+    import wandb
+except ImportError:
+    wandb = None
 
 # Add project root to path for imports
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
@@ -17,6 +29,7 @@ from src.models.trainer import train_rf, train_nn
 def parse_args():
     parser = argparse.ArgumentParser(description="Run Experiments for Misinformation GNN")
     parser.add_argument("--config", type=str, required=True, help="Path to experiment YAML config")
+    parser.add_argument("--no-wandb", action="store_true", help="Disable WandB logging")
     return parser.parse_args()
 
 
@@ -64,6 +77,7 @@ def preprocess_dataset(dataset, preprocessing_config):
 
 def main():
     args = parse_args()
+    use_wandb = (wandb is not None) and (not args.no_wandb) and bool(os.getenv("WANDB_API_KEY"))
 
     with open(args.config, 'r') as f:
         config_data = yaml.safe_load(f)
@@ -100,37 +114,53 @@ def main():
     print(f"Events for LOEO cross-validation ({len(events)}): {events}")
     
     results = []
-    
+
+    wandb_project = (
+        config_data.get("wandb", {}).get("project")
+        or os.getenv("WANDB_PROJECT", "misinformation-gnn")
+    )
+
     for exp_name, config in config_data.get('experiments', {}).items():
         print(f"\n--- Running Experiment: {exp_name} ---")
         model_type = config.get("model_type")
-        
+
+        if use_wandb:
+            wandb.init(
+                project=wandb_project,
+                name=exp_name,
+                config={**config, "config_file": args.config, "input_dim": input_dim, "edge_dim": edge_dim},
+                reinit=True,
+            )
+
         all_true = []
         all_pred = []
-        
+
         pbar = tqdm(events, desc=f"CV: {exp_name}")
         for test_event in pbar:
             # Leave-One-Event-Out Split
             train_data = [d for d in dataset if d.event != test_event]
             test_data = [d for d in dataset if d.event == test_event]
-            
+
             pbar.write(f"  Fold -> Test Event: {test_event} | Train: {len(train_data)} | Test: {len(test_data)}")
-            
+
             if model_type == "rf":
                 y_true, y_pred = train_rf(config, train_data, test_data)
             elif model_type in ["mlp", "gnn", "gat", "gin", "improved_gnn", "improved_gat"]:
-                y_true, y_pred = train_nn(config, model_type, train_data, test_data, input_dim, edge_dim=edge_dim)
+                y_true, y_pred = train_nn(
+                    config, model_type, train_data, test_data, input_dim,
+                    edge_dim=edge_dim, fold_name=test_event,
+                )
             else:
                 raise ValueError(f"Unknown model_type: {model_type}")
-                
+
             # Calculate fold metrics
             f_acc = accuracy_score(y_true, y_pred)
             f_prec = precision_score(y_true, y_pred, zero_division=0)
             f_rec = recall_score(y_true, y_pred, zero_division=0)
             f_f1 = f1_score(y_true, y_pred, zero_division=0)
-            
+
             pbar.write(f"    [Fold Results] Acc: {f_acc:.4f} | Prec: {f_prec:.4f} | Rec: {f_rec:.4f} | F1: {f_f1:.4f}")
-            
+
             results.append({
                 "Experiment": exp_name,
                 "Model": model_type,
@@ -140,16 +170,25 @@ def main():
                 "Recall": f_rec,
                 "F1-Score": f_f1
             })
-            
+
+            if use_wandb:
+                wandb.log({
+                    "fold/event": test_event,
+                    "fold/accuracy": f_acc,
+                    "fold/precision": f_prec,
+                    "fold/recall": f_rec,
+                    "fold/f1": f_f1,
+                })
+
             all_true.extend(y_true)
             all_pred.extend(y_pred)
-            
+
         # Compute global metrics across all folds
         acc = accuracy_score(all_true, all_pred)
         prec = precision_score(all_true, all_pred, zero_division=0)
         rec = recall_score(all_true, all_pred, zero_division=0)
         f1 = f1_score(all_true, all_pred, zero_division=0)
-        
+
         results.append({
             "Experiment": exp_name,
             "Model": model_type,
@@ -159,6 +198,15 @@ def main():
             "Recall": rec,
             "F1-Score": f1
         })
+
+        if use_wandb:
+            wandb.run.summary.update({
+                "global/accuracy": acc,
+                "global/precision": prec,
+                "global/recall": rec,
+                "global/f1": f1,
+            })
+            wandb.finish()
         
     print("\n================ EXPERIMENT RESULTS ================")
     df = pd.DataFrame(results)

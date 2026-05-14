@@ -10,3 +10,6 @@ pyyaml>=6.0
 huggingface_hub>=0.14.0
 sentence-transformers>=2.2.0
 tqdm>=4.65.0
+optuna>=3.0.0
+wandb>=0.17.0
+python-dotenv>=1.0.0
