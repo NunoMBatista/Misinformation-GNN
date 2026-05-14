@@ -485,22 +485,22 @@ def analysis_new_metrics(graphs):
         sig = "***" if p < 0.001 else ("**" if p < 0.01 else ("*" if p < 0.05 else ""))
         print(f"  {label_str:<42} {r_vals.mean():>8.3f} {nr_vals.mean():>8.3f}  {p:>8.4f}  {r_eff:>6.3f}  {sig}")
 
-    # 2×3 grid of box plots
-    fig, axes = plt.subplots(2, 3, figsize=(16, 9))
-    fig.suptitle("New Graph Metrics: Rumour vs Non-Rumour", fontsize=14, fontweight="bold")
-    for ax, (key, label_str, _) in zip(axes.flatten(), _NEW_METRICS):
+    # One figure per metric
+    for key, label_str, _ in _NEW_METRICS:
         r_vals  = rumour[key].dropna()
         nr_vals = non_rumour[key].dropna()
+        if len(r_vals) < 2 or len(nr_vals) < 2:
+            continue
         U, p    = stats.mannwhitneyu(r_vals, nr_vals, alternative="two-sided")
         r_eff   = rank_biserial(U, len(r_vals), len(nr_vals))
+        fig, ax = plt.subplots(figsize=(6, 5))
         coloured_boxplot(ax, nr_vals, r_vals, label_str,
-                         f"{label_str}\np={p:.4f}, r={r_eff:.3f}")
-
-    plt.tight_layout()
-    out = OUTPUT_DIR / "new_metrics.png"
-    plt.savefig(out, dpi=150)
-    plt.close()
-    print(f"\n  Saved: {out}")
+                         f"{label_str}\n(Mann-Whitney p={p:.4f}, r={r_eff:.3f})")
+        plt.tight_layout()
+        out = OUTPUT_DIR / f"new_metric_{key}.png"
+        plt.savefig(out, dpi=150)
+        plt.close()
+        print(f"  Saved: {out}")
 
     return df
 
