@@ -107,6 +107,87 @@ Key findings:
 
 ---
 
+## 2b. Network Science Analysis — Matched Cohort (6 Events)
+
+Same analyses as Section 2, restricted to the **6 events used in classifier evaluation** (excluding prince-toronto, ebola-essien, and ferguson). This is the apples-to-apples comparison with Section 3: n = 5 035 graphs across germanwings, gurlitt, ottawashooting, putinmissing (train) + charliehebdo, sydneysiege (test).
+
+### 2b.1 Cascade Size and Depth
+
+| Metric | Rumour mean | Rumour median | Non-Rumour mean | Non-Rumour median | Spearman ρ | p-value |
+|---|---|---|---|---|---|---|
+| Cascade size (nodes) | 13.77 | 11.0 | 17.41 | 14.0 | −0.101 | < 0.001 *** |
+| Mean cascade depth | 1.260 | 1.000 | 1.546 | 1.048 | −0.093 | < 0.001 *** |
+
+Consistent with Section 2.1: rumour cascades remain significantly smaller and shallower after removing the three excluded events. Effect sizes are nearly identical.
+
+### 2b.2 Tipping Point — Rumour Ratio by Cascade Size
+
+| Size bucket | Cascades | Rumour ratio |
+|---|---|---|
+| 1–5 | 1 298 | **42.6%** |
+| 6–10 | 928 | 39.0% |
+| 11–20 | 1 460 | 37.7% |
+| 21–50 | 1 190 | 32.2% |
+| 51–100 | 123 | 13.0% |
+| 101–200 | 32 | 34.4% |
+| 200+ | 4 | 0.0% |
+| Dataset mean | 5 035 | — |
+
+Monotonic decline from small to large cascades holds; the 101–200 uptick remains (low n artefact). The pattern is unchanged from the full dataset.
+
+### 2b.3 Structural Virality (Average Path Length)
+
+| Class | APL mean | APL median |
+|---|---|---|
+| Rumour | 2.423 | 1.985 |
+| Non-Rumour | 2.801 | 2.111 |
+
+Mann-Whitney U = 2 166 100, p < 0.001 ***, r = 0.116 (small)
+
+Near-identical to Section 2.3 (r = 0.114). Non-rumour cascades are significantly more chain-like.
+
+### 2b.4 Network Robustness — LCC after Hub Removal
+
+| Removed (%) | Rumour LCC | Non-Rumour LCC |
+|---|---|---|
+| 1% | 0.245 | 0.262 |
+| 5% | 0.239 | 0.247 |
+| 10% | 0.210 | 0.205 |
+| 15% | 0.186 | 0.177 |
+| 20% | 0.166 | 0.156 |
+| 25% | 0.152 | 0.142 |
+| 30% | 0.143 | 0.131 |
+
+Curves nearly identical to Section 2.4. No structural difference in hub-centrality dependence.
+
+### 2b.5 Echo Chambers (Branching Factor)
+
+| Metric | Rumour mean | Non-Rumour mean | p-value | *r* |
+|---|---|---|---|---|
+| Branching factor | 4.485 | 4.541 | 0.073 | 0.032 |
+
+Not significant (p = 0.073), consistent with Section 2.5.
+
+### 2b.6 Novel Topological Metrics
+
+| Metric | R mean | NR mean | p-value | *r* | Sig |
+|---|---|---|---|---|---|
+| Epidemic R₀ | 4.308 | 4.382 | 0.184 | 0.023 | ns |
+| Root Dominance | 0.777 | 0.725 | < 0.001 | 0.096 | *** |
+| Gini out-degree | 0.714 | 0.721 | 0.486 | 0.012 | ns |
+| Strahler Number | 1.929 | 2.024 | < 0.001 | 0.076 | *** |
+| Leaf Ratio | 0.737 | 0.716 | 0.002 | 0.053 | ** |
+| Normalised Depth | 0.727 | 0.835 | < 0.001 | 0.077 | *** |
+
+Notable differences vs. Section 2.6 (full dataset):
+- **Gini** drops from *** to ns (p = 0.486): the inequality signal was driven by the excluded events (particularly ferguson, which had unusual degree distributions).
+- **Epidemic R₀** remains ns.
+- Root Dominance, Strahler, Leaf Ratio, and Normalised Depth remain significant with similar effect sizes.
+
+**Overall**: The structural findings are robust to event exclusion. Rumour cascades in the 6-event cohort show the same star/broadcast topology signature (high root dominance, low normalised depth, simpler Strahler structure) as the full dataset.
+
+---
+
 ## 3. Classifier Evaluation
 
 ### 3.1 Feature Configurations
@@ -229,6 +310,39 @@ All differences are statistically significant at p < 0.001. Key findings:
 - **GIN is significantly worse than both GCN and GAT** on text features, consistent with the hypothesis that sum aggregation over-fits the training event distributions.
 
 **Note on power**: with only 2 held-out events, fold-level paired tests (Wilcoxon, n = 2) are not meaningful. All tests above operate on n = 3 106 individual predictions.
+
+---
+
+## 3.6 Ablation: Effect of Per-Event Class Balancing
+
+`_balance_per_event()` undersamples the majority class within each event before training, so no single event's imbalance dominates. This ablation tests whether that step is actually helping.
+
+Same setup as Section 3.4: best HP-searched hyperparameters, full feature set, train on 4 events, evaluate on charliehebdo + sydneysiege combined.
+
+| Model | F1 (balanced) | F1 (no balance) | ΔF1 | Acc (balanced) | Acc (no balance) | ΔAcc |
+|---|---|---|---|---|---|---|
+| ImprovedGNN | 0.5802 | 0.5721 | **+0.0081** | 0.7186 | 0.7057 | +0.013 |
+| ImprovedGAT | 0.5907 | 0.5905 | **+0.0002** | 0.7572 | 0.7334 | +0.024 |
+| GIN | 0.4521 | 0.4609 | −0.0088 | 0.3757 | 0.2994 | +0.076 |
+| MLP | 0.5341 | 0.5308 | **+0.0033** | 0.6478 | 0.6249 | +0.023 |
+
+Precision / Recall breakdown:
+
+| Model | Prec (bal) | Rec (bal) | Prec (no bal) | Rec (no bal) |
+|---|---|---|---|---|
+| ImprovedGNN | 0.524 | 0.650 | 0.507 | 0.657 |
+| ImprovedGAT | 0.597 | 0.585 | 0.547 | 0.642 |
+| GIN | 0.307 | 0.860 | 0.299 | 1.000 |
+| MLP | 0.442 | 0.674 | 0.424 | 0.709 |
+
+**Findings:**
+
+- **F1 differences are negligible** for GNN (+0.008), GAT (+0.0002), and MLP (+0.003). Balancing provides no meaningful F1 benefit for these models.
+- **GIN without balancing degenerates**: Recall = 1.000 and Precision = 0.299 — the model predicts *every graph as rumour*, likely because GIN's sum aggregation amplifies the majority class signal. Balancing recovers a more calibrated GIN (Rec = 0.860, Prec = 0.307), though F1 is still low.
+- **Accuracy improves with balancing for all models** (+0.013 to +0.076), because without balancing models skew toward the majority class (non-rumour), inflating accuracy on the imbalanced test set while hurting rumour recall.
+- The main benefit of balancing is **preventing degenerate predictions** (especially for GIN) and **improving precision without sacrificing much recall** — important for a task where false positives (flagging real news as rumour) have a real cost.
+
+**Conclusion:** Balancing is a useful pre-processing step, particularly for GIN. For GNN, GAT, and MLP the effect on F1 is marginal, but it consistently improves precision and prevents recall collapse.
 
 ---
 

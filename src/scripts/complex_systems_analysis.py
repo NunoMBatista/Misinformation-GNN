@@ -509,12 +509,48 @@ def analysis_new_metrics(graphs):
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 
+ALWAYS_EXCLUDE = {
+    "prince-toronto-all-rnr-threads",
+    "ebola-essien-all-rnr-threads",
+    "ferguson-all-rnr-threads",
+}
+
+TRAIN_EVENTS = {
+    "germanwings-crash-all-rnr-threads",
+    "gurlitt-all-rnr-threads",
+    "ottawashooting-all-rnr-threads",
+    "putinmissing-all-rnr-threads",
+}
+
+TEST_EVENTS = {
+    "charliehebdo-all-rnr-threads",
+    "sydneysiege-all-rnr-threads",
+}
+
+
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--split", choices=["all", "train", "test"], default="all",
+                        help="Which events to include: all (default), train, or test")
+    parser.add_argument("--output-dir", default=None,
+                        help="Override output directory (default: outputs/complex_systems)")
+    args = parser.parse_args()
+
+    global OUTPUT_DIR
+    OUTPUT_DIR = Path(args.output_dir) if args.output_dir else OUTPUT_DIR
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     print("Loading dataset...")
     dataset = load_data()
-    print(f"  {len(dataset)} graphs loaded.")
+    dataset = [d for d in dataset if d.event not in ALWAYS_EXCLUDE]
+
+    if args.split == "train":
+        dataset = [d for d in dataset if d.event in TRAIN_EVENTS]
+    elif args.split == "test":
+        dataset = [d for d in dataset if d.event in TEST_EVENTS]
+
+    print(f"  {len(dataset)} graphs loaded (split={args.split}).")
 
     print("Converting to NetworkX...")
     graphs = build_nx_graphs(dataset)

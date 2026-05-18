@@ -69,12 +69,13 @@ def train_rf(config, train_dataset, test_dataset):
     
     return y_test.tolist(), preds.tolist()
 
-def train_nn(config, model_name, train_dataset, test_dataset, input_dim, edge_dim=0, fold_name=None):
+def train_nn(config, model_name, train_dataset, test_dataset, input_dim, edge_dim=0, fold_name=None, balance=True):
     """Train and evaluate Neural Networks (MLP or GNN)."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"  [Device] Training {model_name.upper()} on: {device}")
 
-    train_dataset = _balance_per_event(train_dataset, random_state=42)
+    if balance:
+        train_dataset = _balance_per_event(train_dataset, random_state=42)
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 

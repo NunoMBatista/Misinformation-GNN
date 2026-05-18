@@ -3,18 +3,22 @@ xai_analysis.py
 
 Two XAI lenses applied to one fixed held-out fold (charliehebdo):
 
-  1. GNNExplainer on SimpleGNN/GCNConv
+  1. GNNExplainer on ImprovedGNN/GCNConv
        → which feature groups and which cascade positions actually drive predictions?
-  2. Attention-weight extraction from GATModel/GATv2Conv
+  2. Attention-weight extraction from ImprovedGAT/GATv2Conv
        → where does the model "look" in the cascade tree, and does it differ
          between rumours and non-rumours?
 
 Charliehebdo is chosen as the held-out event because it is the largest
 (~1950 test graphs), giving the most stable aggregate statistics.
 
+Hyperparameters and architectures match the tuned benchmark configs
+(best_configs.json, gnn_full / gat_full entries).
+
 Outputs: outputs/xai/
 """
 
+import json
 import sys
 import warnings
 import numpy as np
@@ -22,30 +26,26 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 from pathlib import Path
 from collections import defaultdict
 from torch_geometric.loader import DataLoader
-from torch_geometric.utils import to_networkx
+from torch_geometric.utils import to_networkx, to_undirected
 import networkx as nx
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from src.data.dataset import load_data, filter_features
-from src.models.gnn import SimpleGNN, GATModel
-from src.models.trainer import _balance_per_event
+from src.models.gnn import ImprovedGNN, ImprovedGAT
+from src.models.trainer import _balance_per_event, focal_loss
 
 warnings.filterwarnings("ignore")
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-TEST_EVENT   = "charliehebdo-all-rnr-threads"   # largest event → best statistics
-HIDDEN_DIMS  = [64, 32]
-HEADS        = 2
-LR           = 0.001
-EPOCHS       = 100
-WEIGHT_DECAY = 0.0001
-DROPOUT      = 0.5
-SEED         = 42
+TEST_EVENT  = "charliehebdo-all-rnr-threads"   # largest event → best statistics
+SEED        = 42
 
 # GNNExplainer is ~2 s/graph; 80 gives good statistics without a 30-min wait
 MAX_EXPLAIN  = 80
@@ -100,21 +100,30 @@ def node_depths(data):
 
 # ── Training ──────────────────────────────────────────────────────────────────
 
-def train_model(model, train_data, device):
-    """Mirrors trainer.py train_nn: balanced sampling, BCEWithLogitsLoss, Adam."""
-    balanced = _balance_per_event(train_data, random_state=SEED)
-    loader   = DataLoader(balanced, batch_size=32, shuffle=True)
-    opt      = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
-    crit     = nn.BCEWithLogitsLoss()
+def train_model(model, train_data, device, config):
+    """Matches trainer.py train_nn: balanced sampling, focal loss, Adam + cosine annealing, gradient clipping."""
+    balanced  = _balance_per_event(train_data, random_state=SEED)
+    loader    = DataLoader(balanced, batch_size=32, shuffle=True)
+
+    lr        = float(config["learning_rate"])
+    wd        = float(config["weight_decay"])
+    gamma     = float(config.get("focal_gamma", 2.0))
+    epochs    = int(config["epochs"])
+
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
+    criterion = lambda lo, tg: focal_loss(lo, tg, gamma=gamma)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr / 10)
 
     model.train()
-    for _ in range(EPOCHS):
+    for _ in range(epochs):
         for batch in loader:
             batch = batch.to(device)
-            opt.zero_grad()
-            loss  = crit(model(batch.x, batch.edge_index, batch.batch), batch.y.float())
+            optimizer.zero_grad()
+            loss  = criterion(model(batch.x, batch.edge_index, batch.batch), batch.y.float())
             loss.backward()
-            opt.step()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+        scheduler.step()
     return model
 
 
@@ -275,8 +284,9 @@ def plot_node_depth_importance(depth_node_imp, out_dir):
 
 def extract_attention(gat, data, device):
     """
-    Step through the GAT layers manually so we can intercept the per-edge
-    attention coefficients that GATv2Conv normally discards.
+    Step through ImprovedGAT layers manually to intercept per-edge attention
+    coefficients. Replicates ImprovedGAT.forward() exactly: edge direction
+    transform, then for each layer conv → skip + relu + norm → dropout.
 
     GATv2Conv.forward(..., return_attention_weights=True) returns:
         (output, (edge_index, alpha))  where alpha is [num_edges, num_heads]
@@ -284,14 +294,20 @@ def extract_attention(gat, data, device):
     gat.eval()
     x          = data.x.to(device)
     edge_index = data.edge_index.to(device)
-    layer_alphas = []
 
+    # Replicate ImprovedGAT.forward() edge direction transform
+    if gat.edge_direction == 'bidirectional':
+        edge_index = to_undirected(edge_index, num_nodes=x.size(0))
+    elif gat.edge_direction == 'inverted':
+        edge_index = edge_index.flip(0)
+
+    layer_alphas = []
     with torch.no_grad():
-        for conv in gat.convs:
-            out, (_, alpha) = conv(x, edge_index, return_attention_weights=True)
+        for conv, skip, norm in zip(gat.convs, gat.skips, gat.norms):
+            conv_out, (_, alpha) = conv(x, edge_index, return_attention_weights=True)
             layer_alphas.append(alpha.cpu())   # [E, num_heads]
-            # Replicate the forward pass: relu then dropout (no-op in eval mode)
-            x = gat.relu(out)
+            x = norm(F.relu(conv_out + skip(x)))
+            x = F.dropout(x, p=gat.dropout_p, training=False)
 
     return layer_alphas   # list of [E, heads] tensors, one per layer
 
@@ -309,7 +325,13 @@ def build_attention_df(gat, test_data, device):
 
         label  = "Rumour" if int(data.y.item()) == 1 else "Non-Rumour"
         depths = node_depths(data)
-        ei     = data.edge_index.numpy()   # [2, E]
+        # Use the same edge_index that extract_attention operates on (mirrors ImprovedGAT.forward)
+        ei_t = data.edge_index
+        if gat.edge_direction == 'bidirectional':
+            ei_t = to_undirected(ei_t, num_nodes=data.num_nodes)
+        elif gat.edge_direction == 'inverted':
+            ei_t = ei_t.flip(0)
+        ei = ei_t.numpy()   # [2, E_processed]
 
         try:
             layer_alphas = extract_attention(gat, data, device)
@@ -420,6 +442,15 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}   |   Held-out fold: {TEST_EVENT}\n")
 
+    # ── Load tuned hyperparameters ────────────────────────────────────────────
+    best_configs_path = Path("outputs/hp_search/best_configs.json")
+    with open(best_configs_path) as f:
+        best_configs = json.load(f)
+    gnn_hp = best_configs["gnn_full"]["hparams"]
+    gat_hp = best_configs["gat_full"]["hparams"]
+    print(f"GNN hparams (gnn_full): {gnn_hp}")
+    print(f"GAT hparams (gat_full): {gat_hp}\n")
+
     # ── Load & split ──────────────────────────────────────────────────────────
     print("Loading data...")
     train_data, test_data, input_dim = load_split()
@@ -429,20 +460,31 @@ def main():
           f"({n_r} rumour, {n_nr} non-rumour)  |  Feature dim: {input_dim}")
 
     # ── Train ─────────────────────────────────────────────────────────────────
-    print("\nTraining GCN...")
-    gcn = SimpleGNN(input_dim, HIDDEN_DIMS, DROPOUT).to(device)
-    gcn = train_model(gcn, train_data, device)
+    print("\nTraining ImprovedGNN...")
+    gcn = ImprovedGNN(
+        input_dim=input_dim,
+        hidden_dims=gnn_hp["hidden_dims"],
+        dropout=gnn_hp["dropout"],
+        edge_direction=gnn_hp.get("edge_direction", "original"),
+    ).to(device)
+    gcn = train_model(gcn, train_data, device, gnn_hp)
     acc, f1 = evaluate(gcn, test_data, device)
-    print(f"  GCN test  ->  Acc: {acc:.4f}  F1: {f1:.4f}")
+    print(f"  ImprovedGNN test  ->  Acc: {acc:.4f}  F1: {f1:.4f}")
 
-    print("Training GAT...")
-    gat = GATModel(input_dim, HIDDEN_DIMS, HEADS, DROPOUT).to(device)
-    gat = train_model(gat, train_data, device)
+    print("Training ImprovedGAT...")
+    gat = ImprovedGAT(
+        input_dim=input_dim,
+        hidden_dims=gat_hp["hidden_dims"],
+        heads=gat_hp.get("heads", 2),
+        dropout=gat_hp["dropout"],
+        edge_direction=gat_hp.get("edge_direction", "original"),
+    ).to(device)
+    gat = train_model(gat, train_data, device, gat_hp)
     acc, f1 = evaluate(gat, test_data, device)
-    print(f"  GAT test  ->  Acc: {acc:.4f}  F1: {f1:.4f}")
+    print(f"  ImprovedGAT test  ->  Acc: {acc:.4f}  F1: {f1:.4f}")
 
     # ── GNNExplainer ──────────────────────────────────────────────────────────
-    print(f"\n[1/2] GNNExplainer on {min(MAX_EXPLAIN, len(test_data))} test graphs...")
+    print(f"\n[1/2] GNNExplainer on ImprovedGNN — {min(MAX_EXPLAIN, len(test_data))} test graphs...")
     feat_by_label, depth_node_imp = run_gnnexplainer(gcn, test_data, input_dim, device)
 
     group_scores = plot_feature_groups(feat_by_label, OUT_DIR)

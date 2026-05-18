@@ -1,6 +1,9 @@
+import json
+import random
 import torch
 import torch.nn.functional as F
 from pathlib import Path
+from collections import defaultdict
 
 # NLP embedding dimension — must match the model used in node_embedding.py
 NLP_DIM = 384   # all-MiniLM-L6-v2 (sentence-transformers)
@@ -99,6 +102,99 @@ def compute_edge_features(dataset):
         data.edge_attr = torch.cat([cos_sim, time_gap], dim=1)
 
     return dataset
+
+
+def create_stratified_test_split(dataset, test_size=0.10, seed=42,
+                                  save_path="outputs/hp_search/test_split.json"):
+    """
+    Stratified 10% held-out test split.
+
+    Within each event, the rumour and non-rumour graphs are sampled independently
+    so the R/NR ratio is preserved in both halves.  The split is deterministic
+    (fixed seed) and the test thread_ids are persisted to `save_path` so that
+    every subsequent run uses the exact same test graphs.
+
+    If `save_path` already exists the saved split is loaded — graphs not in the
+    saved test set become train_val regardless of `test_size`.
+
+    Returns
+    -------
+    train_val : list[Data]   90 % of every event (stratified)
+    test      : list[Data]   10 % of every event (stratified)
+    """
+    save_path = Path(save_path)
+
+    # ── Load existing split ───────────────────────────────────────────────────
+    if save_path.exists():
+        with open(save_path) as f:
+            saved = json.load(f)
+        test_ids = set(saved["test_thread_ids"])
+        train_val = [d for d in dataset if str(d.thread_id) not in test_ids]
+        test      = [d for d in dataset if str(d.thread_id) in test_ids]
+        print(f"  Loaded existing test split from {save_path}: "
+              f"{len(test)} test / {len(train_val)} train_val")
+        return train_val, test
+
+    # ── Create new split ──────────────────────────────────────────────────────
+    rng = random.Random(seed)
+
+    # Group by (event, label) to stratify within each class within each event
+    buckets = defaultdict(list)
+    for d in dataset:
+        buckets[(d.event, int(d.y.item()))].append(d)
+
+    train_val, test = [], []
+    for (event, label), graphs in sorted(buckets.items()):
+        rng.shuffle(graphs)
+        n_test = max(1, round(len(graphs) * test_size))
+        test.extend(graphs[:n_test])
+        train_val.extend(graphs[n_test:])
+
+    # ── Persist ───────────────────────────────────────────────────────────────
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(save_path, "w") as f:
+        json.dump({
+            "seed": seed,
+            "test_size": test_size,
+            "n_test": len(test),
+            "n_train_val": len(train_val),
+            "test_thread_ids": [str(d.thread_id) for d in test],
+        }, f, indent=2)
+
+    print(f"  Created test split (seed={seed}, test_size={test_size}): "
+          f"{len(test)} test / {len(train_val)} train_val  -> saved to {save_path}")
+    return train_val, test
+
+
+def stratified_kfold(dataset, k=5, seed=42):
+    """
+    Yields k (train, val) splits with stratification by label across the pool.
+
+    Each fold's val set has roughly the same R/NR ratio as the full pool.
+    Graphs are shuffled once before folding so event order doesn't bias folds.
+    """
+    rng = random.Random(seed)
+    indices = list(range(len(dataset)))
+    rng.shuffle(indices)
+    labels = [int(dataset[i].y.item()) for i in indices]
+
+    # Separate positives and negatives, then interleave into k buckets
+    pos = [i for i, l in zip(indices, labels) if l == 1]
+    neg = [i for i, l in zip(indices, labels) if l == 0]
+
+    def split_k(lst):
+        size = len(lst) // k
+        return [lst[j * size: (j + 1) * size if j < k - 1 else len(lst)]
+                for j in range(k)]
+
+    pos_folds = split_k(pos)
+    neg_folds = split_k(neg)
+
+    for fold in range(k):
+        val_idx   = set(pos_folds[fold] + neg_folds[fold])
+        train_idx = [i for i in indices if i not in val_idx]
+        val_idx   = list(val_idx)
+        yield [dataset[i] for i in train_idx], [dataset[i] for i in val_idx]
 
 
 def filter_features(dataset, features_config):

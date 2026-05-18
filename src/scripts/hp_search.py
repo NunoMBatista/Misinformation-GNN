@@ -58,7 +58,9 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
-from src.data.dataset import load_data, filter_features, add_graph_features, compute_edge_features
+from src.data.dataset import (load_data, filter_features, add_graph_features,
+                               compute_edge_features, create_stratified_test_split,
+                               stratified_kfold)
 from src.models.trainer import train_nn
 from src.scripts.run_experiments import preprocess_dataset
 import yaml
@@ -169,6 +171,10 @@ def parse_args():
     parser.add_argument("--session",    type=str, default=None, help="Session ID for WandB grouping + log file naming")
     parser.add_argument("--trial",      type=int, default=None, help="Trial number (logged to WandB and jsonl)")
     parser.add_argument("--no-wandb",   action="store_true",    help="Disable WandB logging")
+    parser.add_argument("--cv-folds",   type=int, default=5,    help="Number of CV folds (default 5)")
+    parser.add_argument("--split-file", type=str,
+                        default="outputs/hp_search/test_split.json",
+                        help="Path to the persisted stratified test split JSON")
     return parser.parse_args()
 
 
@@ -193,7 +199,9 @@ def main():
             use_depth=features_config.get("use_depth", False),
         )
     dataset = preprocess_dataset(dataset, config_data.get("preprocessing", {}))
-    events = sorted(set(d.event for d in dataset))
+
+    # Strip out the held-out 10% test set — HP search never sees it
+    train_val, _ = create_stratified_test_split(dataset, save_path=args.split_file)
 
     space = resolve_space(args.model, input_dim)
 
@@ -227,22 +235,21 @@ def main():
             reinit=True,
         )
 
-    # ---- LOEO evaluation ----
-    all_true, all_pred = [], []
-    for test_event in events:
-        train_data = [d for d in dataset if d.event != test_event]
-        test_data  = [d for d in dataset if d.event == test_event]
+    # ---- 5-fold CV on train_val (test set never touched) ----
+    all_true_flat, all_pred_flat = [], []
+    for fold_idx, (train_data, val_data) in enumerate(
+            stratified_kfold(train_val, k=args.cv_folds)):
         y_true, y_pred = train_nn(
-            hparams, args.model, train_data, test_data, input_dim,
-            edge_dim=edge_dim, fold_name=test_event,
+            hparams, args.model, train_data, val_data, input_dim,
+            edge_dim=edge_dim, fold_name=f"fold{fold_idx}",
         )
-        all_true.extend(y_true)
-        all_pred.extend(y_pred)
+        all_true_flat.extend(y_true)
+        all_pred_flat.extend(y_pred)
 
-    f1   = f1_score(all_true, all_pred, zero_division=0)
-    acc  = accuracy_score(all_true, all_pred)
-    prec = precision_score(all_true, all_pred, zero_division=0)
-    rec  = recall_score(all_true, all_pred, zero_division=0)
+    f1   = f1_score(all_true_flat, all_pred_flat, zero_division=0)
+    acc  = accuracy_score(all_true_flat, all_pred_flat)
+    prec = precision_score(all_true_flat, all_pred_flat, zero_division=0)
+    rec  = recall_score(all_true_flat, all_pred_flat, zero_division=0)
 
     trial_str = f"Trial {args.trial} | " if args.trial else ""
     print(f"\n{trial_str}{args.model} | F1={f1:.4f} | Acc={acc:.4f} | Prec={prec:.4f} | Rec={rec:.4f}")
