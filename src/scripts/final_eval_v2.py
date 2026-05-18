@@ -15,6 +15,7 @@ import datetime
 import yaml
 import numpy as np
 import pandas as pd
+import torch
 from pathlib import Path
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
@@ -90,6 +91,7 @@ def main():
             print(f"\n--- {key} ({model_type}) ---")
             print(f"  Train on {len(train_val)} graphs -> test on {len(test)} graphs")
 
+            torch.manual_seed(42)
             y_true, y_pred = train_nn(
                 hparams, model_type, train_val, test, input_dim,
                 edge_dim=edge_dim, fold_name="held_out_test",

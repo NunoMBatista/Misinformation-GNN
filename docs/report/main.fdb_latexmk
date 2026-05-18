@@ -1,15 +1,15 @@
 # Fdb version 4
-["bibtex main"] 1778788416.15857 "main.aux" "main.bbl" "main" 1778788416.63925 0
-  "./references.bib" 1778778896.5136 3852 b0313d5628aba400d49af96e97cf9c83 ""
+["bibtex main"] 0 "main.aux" "main.bbl" "main" 1779136631.19559 0
   "/usr/share/texlive/texmf-dist/bibtex/bst/llncs/splncs04.bst" 1698954974 32146 aadf770ded437d161532035219ea6f45 ""
-  "main.aux" 1778788416.45309 6642 81f54ea75ed0ec58eac267b6c4832e5c "pdflatex"
+  "main.aux" 0 -1 0 "pdflatex"
+  "references.bib" 0 -1 0 ""
   (generated)
   "main.bbl"
   "main.blg"
   (rewritten before read)
-["pdflatex"] 1778788416.21447 "/home/nuno/Documents/Misinformation-GNN/docs/report/main.tex" "main.pdf" "main" 1778788416.63937 0
+["pdflatex"] 1779136630.51128 "/home/nuno/Documents/Misinformation-GNN/docs/report/main.tex" "main.pdf" "main" 1779136631.19584 0
   "/etc/texmf/web2c/texmf.cnf" 1764507328.4437 475 c0e671620eb5563b2130f56340a5fde8 ""
-  "/home/nuno/Documents/Misinformation-GNN/docs/report/main.tex" 1778788415.41613 27358 f9e1fae5e645c2d608e06875fe1ce6cd ""
+  "/home/nuno/Documents/Misinformation-GNN/docs/report/main.tex" 1779136630.24041 25168 05077f7a93e04d46987a3908b616f93d ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/ecbx0900.tfm" 1136768653 3584 1a7de6c99457381c64abc1a7c545505f ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/ecbx1000.tfm" 1136768653 3584 2d666ecf6d466d8b007246bc2f94d9da ""
@@ -55,7 +55,6 @@
   "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb" 1248133631 32762 224316ccc9ad3ca0423a14971cfa7fc1 ""
   "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb" 1248133631 33993 9b89b85fd2d9df0482bd47194d1d3bf3 ""
   "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb" 1248133631 32569 5e5ddc8df908dea60932f3c484a54c0d ""
-  "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy6.pfb" 1248133631 32587 1788b0c1c5b39540c96f5e42ccd6dae8 ""
   "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb" 1248133631 32716 08e384dc442464e7285e891af9f45947 ""
   "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy9.pfb" 1248133631 32442 c975af247b6702f7ca0c299af3616b80 ""
   "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb" 1248133631 34694 ad62b13721ee8eda1dcc8993c8bd7041 ""
@@ -105,10 +104,11 @@
   "/usr/share/texmf/web2c/texmf.cnf" 1707919699 40399 f2c302f7d2af602abb742093540a5834 ""
   "/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map" 1774798681.98626 5472669 54eaf61a88b6b7896ebd0dac973cb29c ""
   "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1774798765 8213055 b74f3ced8925d6c470b38bd88fb65d14 ""
+  "gcn_feature_groups.png" 1779135543.76327 70996 15c215b55288644754378083f5d6388e ""
   "llncs.cls" 1777995825.57897 43402 5fb5a2dc40571aa40f3d199c00cbb986 ""
-  "main.aux" 1778788416.45309 6642 81f54ea75ed0ec58eac267b6c4832e5c "pdflatex"
-  "main.bbl" 1778788416.21234 3023 fc0e5378127ffa7fd7103b52d2c962d5 "bibtex main"
-  "main.tex" 1778788415.41613 27358 f9e1fae5e645c2d608e06875fe1ce6cd ""
+  "main.aux" 1779136630.95006 6487 ef553002729b49759c448fc3c3ecd787 "pdflatex"
+  "main.bbl" 0 -1 0 "bibtex main"
+  "main.tex" 1779136630.24041 25168 05077f7a93e04d46987a3908b616f93d ""
   (generated)
   "main.aux"
   "main.log"

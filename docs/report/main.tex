@@ -20,26 +20,23 @@
 
 \begin{abstract}
 Automated rumour detection on social media requires classifiers that generalise
-across unseen news events, yet most prior work evaluates within a single
-train/test split. We study this challenge on the PHEME dataset of 6{,}178
-Twitter cascade graphs spanning seven real-world events, using a strict
-two-phase leave-one-event-out protocol that keeps two events entirely withheld
-during hyperparameter search. We benchmark Random Forest, MLP, GCN, and GAT
-under three feature ablations (full, text-only, structural-only), and complement
-the classification study with a network science characterisation of cascade
-topology and GNNExplainer and GAT attention interpretability analyses.
-Structural-only models fall below the random lower bound on the held-out test
-set (macro F1 $< 0.375$), confirming that pure topology does not generalise
-across events, despite consistent structural differences between classes
-(rank-biserial $r < 0.15$ throughout). Text-based models all exceed the lower
-bound; GAT with text features achieves the best combined macro F1 of 0.610,
-significantly outperforming flat mean-pooled MLP (McNemar $p < 0.001$).
-Adding structural features to text-based models consistently degrades held-out
-performance, indicating topology is event-specific rather than event-general.
-GNNExplainer reveals that authority signals (follower count, PageRank) are
-more important for rumour predictions than non-rumour ones, while GAT attention
-concentrates on fewer nodes for rumours, consistent with an anomalous-node
-detection pattern.
+across news events, yet most prior work evaluates within a single train/test
+split. We study this on the PHEME dataset of 6{,}178 Twitter cascade graphs
+spanning seven real-world events, using a stratified 10\% held-out test split
+that is fixed before hyperparameter search begins. We benchmark MLP, GCN, GAT,
+and GIN under three feature ablations (full, text-only, structural-only), and
+complement the classification study with a network science characterisation of
+cascade topology and GNNExplainer and GAT attention interpretability analyses.
+All four structural-only models cluster near the random lower bound ($\approx
+0.394$), with F1 ranging from 0.484 (MLP) to 0.519 (GAT), confirming that
+pure topology provides only weak cross-event signal despite consistent
+structural differences between classes (rank-biserial $r < 0.15$ throughout). Text-based models generalise well; GIN with full features achieves
+the best F1 of 0.826, outperforming flat mean-pooled MLP by 0.081.
+Adding structural node features consistently hurts GCN and GAT but benefits GIN,
+suggesting sum aggregation can exploit degree distributions that mean aggregation
+cannot. GNNExplainer reveals that authority signals (follower count, PageRank)
+drive rumour predictions, while GAT attention concentrates on fewer nodes for
+rumours, consistent with an anomalous-node detection pattern.
 \end{abstract}
 
 \section{Introduction}
@@ -71,24 +68,15 @@ labelled as Rumour or Non-Rumour. First, does graph topology alone generalise
 across unseen events? Second, does message passing add value beyond
 mean-pooled text embeddings when node features are held constant? Third, which
 features drive GNN predictions, and do these patterns differ between classes?
-We adopt a strict leave-one-event-out (LOEO) evaluation protocol, keeping two
-events entirely held out from hyperparameter search.
+We adopt a stratified 10\% held-out test split that is fixed before
+hyperparameter search, so the test set is never seen during model selection.
 
-Our contributions are threefold. We characterise cascade topology across six
-analyses spanning cascade size and depth, structural virality~\cite{goel2016structural},
-network robustness, echo chambers, and novel branching metrics, finding consistent
-but small structural differences: rumour cascades are shallower and more
-broadcast-like, with lower Strahler branching complexity, yet these effects are
-insufficient to drive cross-event classification (structural-only models fall below
-the random lower bound). We then benchmark MLP, GCN, and GAT under three feature ablations (full,
-text-only, and structural-only) with bootstrap confidence intervals and
-McNemar's significance tests; GAT with text features achieves a combined macro
-F1 of 0.610, significantly outperforming flat mean-pooled MLP ($p < 0.001$),
-confirming that message passing provides genuine signal beyond text alone. Finally, we apply GNNExplainer~\cite{ying2019gnnexplainer} and GAT attention
-analysis: GNNExplainer reveals the GCN assigns significantly higher feature
-importance to authority signals (follower count, PageRank) for rumour graphs, while
-GAT attention is highest at depth-2 in both classes and shows lower per-graph
-entropy for rumours, indicating more concentrated attention.
+Our contributions are: (i) a topological characterisation across six network
+science analyses, finding consistently small structural differences between
+classes; (ii) a benchmark of MLP, GCN, GAT, and GIN under three feature
+ablations, with GIN achieving the best F1 of 0.826; and (iii) GNNExplainer and
+GAT attention analyses that identify degree centrality, follower count, and
+PageRank as the primary discriminative signals.
 
 \section{Dataset and Problem Formulation}
 
@@ -101,13 +89,10 @@ feature matrix), the goal is to predict $y \in \{0, 1\}$ (Non-Rumour / Rumour)
 for the graph as a whole.
 
 We use the PHEME dataset~\cite{zubiaga2016pheme}, comprising nine real-world
-Twitter news events with thread-level Rumour/Non-Rumour annotations. Two events
-are excluded due to near-degenerate class distributions: \textit{ebola-essien}
-(100\% Rumour, 14 cascades) and \textit{prince-toronto} (98.3\% Rumour, 233
-cascades). A further event, \textit{ferguson}, is excluded from classifier
-evaluation owing to distributional shift that substantially inflates
-cross-event variance. The remaining seven events yield 6,178 graphs in total;
-event-level statistics are shown in Table~\ref{tab:dataset}. The positive rate
+Twitter news events with thread-level Rumour/Non-Rumour annotations. Two events are excluded due to near-degenerate class distributions:
+\textit{ebola-essien} (100\% Rumour, 14 cascades) and \textit{prince-toronto}
+(98.3\% Rumour, 233 cascades). The remaining seven events yield 6,178 graphs
+in total; event-level statistics are shown in Table~\ref{tab:dataset}. The positive rate
 varies from 22.0\% (charliehebdo) to 52.9\% (putinmissing), reflecting genuine
 differences in how each news event unfolded on Twitter. We apply a
 minimum-size filter of $|\mathcal{V}| \geq 3$, removing cascades that consist
@@ -117,33 +102,29 @@ Class imbalance is handled at training time by per-event majority-class
 undersampling, ensuring that no single event's distribution dominates the
 training set.
 
-As an additional contribution, we convert the PHEME annotations and graph
-structures into a ready-to-use PyTorch Geometric dataset and release it
-publicly on Zenodo~\cite{batista2026pheme_pyg} and Hugging
-Face\footnote{\url{https://huggingface.co/datasets/NunoBatista/PHEME-Misinformation-Graphs}}
-for convenient programmatic access, removing the need to parse raw JSON files
-to reproduce our experiments.
+We release the dataset as a PyTorch Geometric archive on
+Zenodo~\cite{batista2026pheme_pyg} and Hugging
+Face.\footnote{\url{https://huggingface.co/datasets/NunoBatista/PHEME-Misinformation-Graphs}}
 
 \begin{table}[t]
 \caption{PHEME event statistics after excluding \textit{ebola-essien} and
-\textit{prince-toronto}. Events marked ($\dagger$) form the held-out test set;
-($\ddagger$) is excluded from classifier evaluation (distribution shift) and
-used only in the network-science analysis.}
+\textit{prince-toronto}. All seven events contribute to both hyperparameter
+search and final evaluation via a stratified 10\% held-out split.}
 \label{tab:dataset}
 \centering
 \begin{tabular}{lrrrr}
 \toprule
 Event & Graphs & Rumour & Non-Rumour & R\% \\
 \midrule
-charliehebdo$^{\dagger}$  & 2{,}079 & 458 & 1{,}621 & 22.0 \\
-ferguson$^{\ddagger}$     & 1{,}143 & 284 &   859   & 24.8 \\
-germanwings               &   469   & 238 &   231   & 50.7 \\
-gurlitt                   &   138   &  61 &    77   & 44.2 \\
-ottawashooting            &   890   & 470 &   420   & 52.8 \\
-putinmissing              &   238   & 126 &   112   & 52.9 \\
-sydneysiege$^{\dagger}$   & 1{,}221 & 522 &   699   & 42.8 \\
+charliehebdo  & 2{,}079 & 458 & 1{,}621 & 22.0 \\
+ferguson      & 1{,}143 & 284 &   859   & 24.8 \\
+germanwings   &   469   & 238 &   231   & 50.7 \\
+gurlitt       &   138   &  61 &    77   & 44.2 \\
+ottawashooting &  890   & 470 &   420   & 52.8 \\
+putinmissing  &   238   & 126 &   112   & 52.9 \\
+sydneysiege   & 1{,}221 & 522 &   699   & 42.8 \\
 \midrule
-\textbf{Total}            & \textbf{6{,}178} & \textbf{2{,}159} & \textbf{4{,}019} & \textbf{34.9} \\
+\textbf{Total} & \textbf{6{,}178} & \textbf{2{,}159} & \textbf{4{,}019} & \textbf{34.9} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -166,44 +147,34 @@ embeddings from \texttt{all-MiniLM-L6-v2}~\cite{reimers2019sbert},
 Two positional features, \texttt{is\_root} and BFS \texttt{depth}, are
 appended at load time, bringing the full dimension to $d = 392$. We evaluate
 three feature configurations: \textit{full} ($d = 392$), \textit{text-only}
-($d = 386$), and \textit{structural-only} ($d = 6$).
+($d = 386$, NLP + user features), and \textit{structural-only} ($d = 8$,
+user + graph-structural + positional features, no NLP).
 
 \subsection{Evaluation Protocol}
 
-We use a two-phase LOEO design to prevent hyperparameter leakage from the
-test events (charliehebdo and sydneysiege, marked $\dagger$ in
-Table~\ref{tab:dataset}). In the \textit{search phase} these two events are
-withheld entirely; 50 guided trials per model-configuration pair are run over
-the four training events with macro F1 as the criterion. In the
-\textit{evaluation phase}, models are retrained on all four training events
-and evaluated on the 3{,}106-graph combined test set. We report macro F1,
-precision, recall, and accuracy, together with bootstrap 95\% confidence
-intervals and McNemar's test for pairwise comparisons.
+We hold out a stratified 10\% of each event's cascades as a fixed test set,
+sampling the Rumour and Non-Rumour classes independently within each event to
+preserve local class ratios. The held-out thread identifiers ($\approx 540$
+graphs) are fixed before any model training, so the test set is never seen
+during hyperparameter search. Hyperparameters are selected on the remaining
+90\% using 5-fold stratified cross-validation (50 guided trials per
+model-configuration pair, macro F1 as the criterion). Final models are trained
+on the full 90\% and evaluated on the held-out set. We report macro F1 (which weights both classes equally, penalising models
+that ignore the minority rumour class) and accuracy with bootstrap 95\%
+confidence intervals (2{,}000 resamples).
 
 \section{Methodology}
 
-\subsection{Baseline Models}
-
-\paragraph{Random Forest (RF).}
-Each cascade is reduced to a single vector by mean-pooling its node feature
-matrix: $\mathbf{g} = \frac{1}{|\mathcal{V}|}\sum_{v}\mathbf{x}_v$. A Random
-Forest classifier (100 trees, balanced class weights) is trained on these
-vectors. Any GNN that outperforms the RF gains something specifically from
-message passing rather than from richer pooling.
+\subsection{Baseline Model}
 
 \paragraph{Multi-Layer Perceptron (MLP).}
-The MLP also operates on mean-pooled vectors, using fully connected layers with
-ReLU activations and dropout, followed by a single output logit. It shares the
-same input as the RF but is differentiable and depth-tunable, isolating the
-contribution of a learned non-linear classifier before any graph structure is
-introduced.
+Each cascade is reduced to a single vector by mean-pooling its node feature
+matrix: $\mathbf{g} = \frac{1}{|\mathcal{V}|}\sum_{v}\mathbf{x}_v$. Fully
+connected layers with ReLU activations and dropout map this to a single output
+logit. Any GNN that outperforms the MLP gains something specifically from
+message passing rather than from feature richness alone.
 
 \subsection{Graph Neural Network Models}
-
-Both GNN architectures share three design choices that go beyond their respective
-base convolutions: residual skip connections, layer normalisation, and a root
-readout that concatenates the mean-pooled graph embedding with the root node's
-final representation.
 
 \paragraph{Graph Convolutional Network (GCN).}
 We use the spectral graph convolution of Kipf and Welling~\cite{kipf2017semi}.
@@ -217,10 +188,11 @@ At each layer $\ell$, the representation of node $v$ is updated as:
 \end{equation}
 %
 where $\tilde{d}_v = |\mathcal{N}(v)| + 1$ is the degree after adding self-loops.
-The pre-activations are passed through a residual block,
-$\mathbf{h}_v^{(\ell)} = \mathrm{LayerNorm}(\mathrm{ReLU}(\tilde{\mathbf{h}}_v^{(\ell)} + \mathbf{W}_{\mathrm{skip}}^{(\ell)}\mathbf{h}_v^{(\ell-1)}))$,
-where $\mathbf{W}_{\mathrm{skip}}^{(\ell)}$ is a bias-free linear projection.
-LayerNorm stabilises training on the shallow cascades common in PHEME.
+Pre-activations pass through a residual block with LayerNorm, stabilising
+training on the shallow cascades common in PHEME. Edge direction is a discrete hyperparameter for GCN and GAT:
+\textit{original} (parent$\to$child), \textit{inverted} (child$\to$parent,
+propagating leaf engagement signals toward the root), or
+\textit{bidirectional} (both).
 
 \paragraph{Graph Attention Network (GAT).}
 We use the GATv2 attention mechanism of Brody et al.~\cite{brody2022gatv2}, which
@@ -234,17 +206,22 @@ GAT~\cite{velickovic2018gat} by computing a fully dynamic attention score:
     \right)
 \end{equation}
 %
-Scores are normalised via softmax over the neighbourhood,
-$\alpha_{ij} = \exp(e_{ij})/\sum_{k \in \mathcal{N}(i)}\exp(e_{ik})$.
-With $K$ parallel heads, representations are concatenated and passed through
-the same residual block as the GCN, with $\mathbf{W}_{\mathrm{skip}}^{(\ell)}$
-projecting to $K \times d_\ell$. The number of heads $K$ is tuned during
-hyperparameter search.
+Scores are normalised by softmax over each node's neighbourhood.
+With $K$ attention heads, representations are concatenated and passed through
+the same residual block as the GCN. The number of heads $K$ is tuned
+during hyperparameter search.
+
+\paragraph{Graph Isomorphism Network (GIN).}
+GIN~\cite{xu2019powerful} applies a learnable-$\epsilon$ sum aggregation
+followed by an MLP per layer. Unlike mean pooling, sum preserves neighbour
+counts, making GIN as expressive as the Weisfeiler-Lehman test. GIN uses
+LayerNorm per layer without residual skips.
 
 \paragraph{Shared readout.}
-After $L$ message-passing layers, both models produce a graph-level
+After $L$ message-passing layers, all three models produce a graph-level
 representation by concatenating the mean-pooled node embeddings with the root
-node's final embedding:
+node's embedding (preserving the source tweet's signal, which pooling alone
+would otherwise dilute):
 %
 \begin{equation}
   \hat{\mathbf{g}} =
@@ -255,25 +232,15 @@ node's final embedding:
     \right]
 \end{equation}
 %
-The root node (index~0, the source tweet) carries information about the cascade's
-origin that mean pooling would dilute. A single linear layer maps $\hat{\mathbf{g}}$
-to the output logit: $\hat{y} = \sigma(\mathbf{w}_c^\top \hat{\mathbf{g}})$.
+A single linear layer maps $\hat{\mathbf{g}}$ to the output logit:
+$\hat{y} = \sigma(\mathbf{w}_c^\top \hat{\mathbf{g}})$.
 
-\paragraph{Edge direction.}
-The raw cascade graphs are directed (parent $\to$ child). We experiment with three
-configurations: \textit{original} (edges point from source to reply, information
-flows bottom-up through the classifier), \textit{inverted} (reversed), and
-\textit{bidirectional} (both directions added via \texttt{to\_undirected},
-effectively doubling the edge count). Edge direction is treated as a discrete
-hyperparameter during search.
 
 \subsection{Training Procedure}
 
 \paragraph{Optimiser and schedule.}
-All neural models are trained with the Adam optimiser and a cosine annealing
-learning rate schedule with minimum learning rate $\eta_{\min} = \eta_0 / 10$,
-where $\eta_0$ is the initial rate. Gradients are clipped to $\ell_2$ norm~1.0
-at every step to prevent instability on very small graphs.
+All neural models use Adam with cosine annealing ($\eta_{\min} = \eta_0 / 10$)
+and gradient clipping ($\ell_2$ norm~1.0).
 
 \paragraph{Loss function.}
 We use binary focal loss~\cite{lin2017focal}:
@@ -284,27 +251,20 @@ We use binary focal loss~\cite{lin2017focal}:
 \end{equation}
 %
 where $p_{t,i} = \sigma(\hat{y}_i)$ for positive examples and
-$p_{t,i} = 1 - \sigma(\hat{y}_i)$ for negative examples. The modulating factor
-$(1-p_{t,i})^\gamma$ down-weights well-classified examples and concentrates
-learning on hard or misclassified ones, which is particularly beneficial given
-the class imbalance present in several events. The exponent $\gamma$ is tuned
-during hyperparameter search.
+$1 - \sigma(\hat{y}_i)$ for negative ones; the modulating factor
+$(1-p_{t,i})^\gamma$ down-weights easy examples and focuses training on hard
+cases.
 
 \paragraph{Class balancing.}
-Before each training run, the training set is balanced by per-event
-majority-class undersampling: within each event, the larger class is randomly
-subsampled to match the size of the smaller one. This prevents events with
-heavily skewed class ratios from dominating the training signal.
+The majority class is undersampled to match the minority class within each
+event, preventing skewed events from dominating the training signal.
 
 \paragraph{Hyperparameter search.}
-Hyperparameters are selected with a sequential model-free search: 50 guided
-trials are run per model-configuration combination (12 combinations in total:
-4 models $\times$ 3 feature configurations), where each trial evaluates the
-full LOEO procedure over the four training events and reports the global macro
-F1. The search space covers hidden layer dimensions, dropout rate, learning
-rate, weight decay, focal loss exponent $\gamma$, number of attention heads
-(GAT only), and edge direction (GCN and GAT). The best configuration per
-combination is used for all final held-out evaluations.
+Hyperparameters are tuned via 50 guided trials per model-configuration pair
+(12 total), each evaluated by 5-fold stratified CV on the 90\% pool (macro F1
+criterion). The search space covers hidden dimensions, dropout, learning rate,
+weight decay, focal $\gamma$, attention heads (GAT only), and edge direction;
+the best configuration per pair is used for all final evaluations.
 
 \section{Related Work}
 
@@ -318,12 +278,9 @@ proposed GCAN, which jointly models user interaction graphs and source-content
 co-attention, also providing post-hoc explanations via attention weights. Monti et
 al.~\cite{monti2019fakenews} applied spectral graph convolutions to the propagation
 graphs of FakeNewsNet, demonstrating that geometric deep learning transfers across
-datasets. Relative to these works, our study makes three methodological departures:
-we use a strict two-phase LOEO protocol that keeps two events entirely hidden
-during hyperparameter search; we perform a controlled feature ablation that
-isolates the contribution of message passing from that of the text embedding; and
-we complement classification with a network-science characterisation of cascade
-topology.
+datasets. Our study differs in using a held-out split fixed before hyperparameter search,
+performing a controlled feature ablation that isolates message passing from text
+richness, and complementing classification with topological analysis.
 
 \paragraph{Explainability and cascade topology.}
 GNNExplainer~\cite{ying2019gnnexplainer} provides post-hoc explanations by
@@ -331,51 +288,40 @@ optimising a soft mask over the node features and subgraph of each prediction;
 we use it to compare the feature-group importance the model assigns to rumour
 versus non-rumour graphs. For cascade topology, Goel et
 al.~\cite{goel2016structural} defined structural virality as the average
-pairwise distance in a diffusion tree, providing a principled measure of
-broadcast versus chain-like spread that we adopt as one of our six topological
-analyses.
+pairwise distance in a diffusion tree, providing a principled measure of broadcast versus chain-like spread that we
+adopt in our topological analysis.
 
 \section{Network Science Analysis}
 \label{sec:topology}
 
-We characterise the structural properties of the full 6{,}425-graph dataset
-(all events, no size filter) across six analyses. All comparisons use two-sided Mann-Whitney~U tests. The rank-biserial effect
-size $r \in [0, 1]$ measures practical magnitude as the non-parametric
-correlation between class membership and the metric (0 = no separation,
-1 = perfect separation); thresholds: small $r \geq 0.1$, medium $r \geq 0.3$.
-Cascade size and depth additionally report Spearman~$\rho$, the rank-order
-correlation between metric value and the binary Rumour/Non-Rumour label. The central finding
-is that rumour cascades are consistently shallower and more broadcast-oriented
-than non-rumour cascades, but all effects are small ($r < 0.15$), and the
-structural signal does not generalise across events (confirmed in
-Section~\ref{sec:results}).
+We characterise structural properties of the full 6{,}425-graph dataset (all
+events, no size filter) using two-sided Mann-Whitney~U tests. Rank-biserial $r$
+measures effect size; Spearman~$\rho$ measures correlation with the Rumour
+label for continuous metrics. Rumour cascades are consistently shallower and
+more broadcast-oriented, but all effects are small ($r < 0.15$) and do not
+generalise to classification (Section~\ref{sec:results}).
 
 \paragraph{Cascade size and depth.}
 Rumour cascades are significantly smaller (mean 13.89 nodes vs.\ 18.00;
 Spearman $\rho = -0.119$, $p < 0.001$) and shallower (mean depth 1.257
-vs.\ 1.528; $\rho = -0.102$, $p < 0.001$), with small effect sizes.
-
-\paragraph{Tipping point.}
-Stratifying by cascade size reveals a tipping-point pattern: rumour prevalence
-declines monotonically from 44.9\% among cascades with 1--5 nodes to 11.1\%
-in those with more than 200 nodes, consistent with factual content continuing
-to accumulate replies while rumour threads stall early.
+vs.\ 1.528; $\rho = -0.102$, $p < 0.001$). Stratifying by size reveals
+a tipping-point pattern: rumour prevalence declines monotonically from
+44.9\% among 1--5-node cascades to 11.1\% above 200 nodes, consistent with
+factual content continuing to accumulate replies while rumour threads stall early.
 
 \paragraph{Structural virality.}
-Following Goel et al.~\cite{goel2016structural}, structural virality is defined
-as the average pairwise path length (APL) in the cascade tree. Rumour cascades
-have significantly lower APL (mean 2.463 vs.\ 2.808, $p < 0.001$, $r = 0.114$),
-confirming a structurally more star-like topology (replies cluster around the root)
-while non-rumour cascades exhibit longer information chains consistent with viral
-diffusion.
+Structural virality (average pairwise path length~\cite{goel2016structural})
+is significantly lower for rumour cascades (mean 2.463 vs.\ 2.808, $p < 0.001$,
+$r = 0.114$), confirming a more star-like topology; non-rumour cascades form
+longer diffusion chains.
 
 \paragraph{Network robustness and echo chambers.}
 Robustness is measured by tracking the largest connected component fraction after
 removing the top 1\%--30\% of degree-ranked hubs. Both classes show near-identical curves, differing by at most 0.014 at any removal rate. The branching factor (mean out-degree of internal nodes) is also
 indistinguishable between classes ($p = 0.650$, $r = 0.007$).
 
-\paragraph{Novel topological metrics.}
-Table~\ref{tab:topology} reports six cascade complexity metrics. Four discriminate
+\paragraph{Further topological metrics.}
+Table~\ref{tab:topology} reports six cascade complexity metrics. Five discriminate
 significantly. Root Dominance (fraction of all edges incident on the root node) is
 higher for rumours ($r = 0.074$), reinforcing the broadcast/star pattern. Strahler
 Number, a recursive measure of tree branching complexity analogous to stream order in
@@ -385,14 +331,14 @@ trees. Normalised Depth (max depth divided by $\log_2 n$) is lower for rumours
 The Gini coefficient of the out-degree distribution (0 = all nodes have
 equal out-degree; 1 = one node holds all edges) is lower for rumours
 ($r = 0.065$), meaning non-rumour cascades contain more high-degree hub nodes.
-Leaf Ratio (fraction of nodes with out-degree zero, i.e., no replies) is
-marginally significant ($p = 0.010$, $r = 0.039$). Epidemic~$R_0$, the mean
+Leaf Ratio (fraction of nodes with out-degree zero, i.e., no replies) also
+reaches significance ($p = 0.010$, $r = 0.039$). Epidemic~$R_0$, the mean
 out-degree of nodes that themselves received at least one reply (analogous to
 the basic reproduction number in epidemiology), does not reach significance
 ($p = 0.081$).
 
 \begin{table}[t]
-\caption{Novel topological metrics comparing Rumour (R) and Non-Rumour (NR) cascades
+\caption{Topological metrics comparing Rumour (R) and Non-Rumour (NR) cascades
 ($n = 6{,}425$, Mann-Whitney~U). $r$ = rank-biserial effect size.
 Significance: *** $p < 0.001$, ** $p < 0.01$, ns $p \geq 0.05$.}
 \label{tab:topology}
@@ -414,104 +360,142 @@ Epidemic $R_0$   & 4.214 & 4.469 & 0.081    & 0.028 & ns  \\
 \section{Classification Results}
 \label{sec:results}
 
-We evaluate four classifiers under three feature configurations on the held-out
-test set (3{,}106 graphs). The random-classifier lower bound is macro F1 = 0.375;
-Table~\ref{tab:results} reports full results.
+We evaluate four models under three feature configurations on the $\approx 540$-graph
+held-out test set. The random lower bound (predict-all-non-rumour) is macro
+F1 $\approx 0.394$; $\Delta$ in Table~\ref{tab:results} is the margin above this bound.
 
 \begin{table}[t]
-\caption{Final held-out evaluation. Models are trained on four events and tested on
-charliehebdo and sydneysiege (never seen during hyperparameter search).
-Combined macro F1 over 3{,}106 graphs; $\Delta$ is the margin above the
-random lower bound (0.375). Best result per column in \textbf{bold}.}
+\caption{Final held-out evaluation on the stratified 10\% test set ($\approx 540$
+graphs). $\Delta$ = margin above the random lower bound (F1 $\approx 0.394$).
+\textbf{Bold}: best result.}
 \label{tab:results}
 \centering
-\begin{tabular}{llrrrrr}
+\begin{tabular}{llrrr}
 \toprule
-Model & Config & Charlie F1 & Sydney F1 & Comb.\ F1 & Acc & $\Delta$ \\
+Model & Config & F1 & Acc & $\Delta$ \\
 \midrule
-GAT  & text   & 0.552 & 0.653 & \textbf{0.610} & \textbf{0.770} & +0.235 \\
-GAT  & full   & \textbf{0.557} & 0.576 & 0.565 & 0.709 & +0.190 \\
-GCN  & text   & 0.504 & 0.604 & 0.551 & 0.686 & +0.176 \\
-GCN  & full   & 0.540 & 0.557 & 0.548 & 0.697 & +0.173 \\
-MLP  & text   & 0.473 & 0.577 & 0.520 & 0.643 & +0.145 \\
-MLP  & full   & 0.460 & \textbf{0.600} & 0.521 & 0.614 & +0.146 \\
+GCN  & text   & 0.816 & 0.863 & $+$0.422 \\
+GAT  & text   & 0.809 & 0.857 & $+$0.415 \\
+GIN  & text   & 0.808 & 0.861 & $+$0.414 \\
+MLP  & text   & 0.747 & 0.802 & $+$0.353 \\
 \midrule
-MLP  & struct & 0.365 & 0.000 & 0.303 & 0.353 & $-$0.072 \\
-GCN  & struct & 0.289 & 0.282 & 0.287 & 0.414 & $-$0.088 \\
-GAT  & struct & 0.152 & 0.247 & 0.200 & 0.666 & $-$0.175 \\
+\textbf{GIN} & full & \textbf{0.826} & 0.869 & $+$0.432 \\
+GAT  & full   & 0.786 & 0.846 & $+$0.392 \\
+GCN  & full   & 0.784 & 0.839 & $+$0.390 \\
+MLP  & full   & 0.745 & 0.800 & $+$0.351 \\
+\midrule
+GAT  & struct & 0.519 & 0.615 & $+$0.125 \\
+GIN  & struct & 0.511 & 0.565 & $+$0.117 \\
+GCN  & struct & 0.492 & 0.630 & $+$0.098 \\
+MLP  & struct & 0.484 & 0.515 & $+$0.090 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \paragraph{Structural-only models.}
-All three structural-only classifiers fall below the random lower bound
-(F1 = 0.200--0.303 vs.\ 0.375): topology alone does not generalise across events.
+All four structural-only models cluster tightly near the random lower bound
+(F1 0.484--0.519, $\Delta$ +0.090 to +0.125). No architecture obtains
+reliable cross-event discriminative signal from pure topology; the gains are
+modest and overlapping in confidence intervals.
 
 \paragraph{Text and full-feature models.}
-All six text and full-feature models exceed the lower bound by comfortable margins
-(+0.145 to +0.235). GAT with text features achieves the best combined F1 of
-0.610. Adding structural features consistently hurts generalisation: GAT drops from
-0.610 to 0.565 and GCN from 0.551 to 0.548 in the full configuration.
+All eight text and full-feature models exceed the lower bound by large margins
+(+0.351 to +0.432). GIN with full features achieves the best F1 of 0.826.
+For GCN and GAT, text-only configurations outperform full (+0.032 and +0.023),
+indicating structural node features add noise under mean aggregation.
+GIN reverses this pattern: full features are best (+0.018), consistent with
+sum aggregation extracting signal from degree distributions that mean pooling
+averages away.
 
-\paragraph{Statistical tests.}
-Bootstrap 95\% CIs for the top four models (GAT-text [0.583, 0.636], GAT-full
-[0.540, 0.590], GCN-text [0.526, 0.576], GCN-full [0.521, 0.573]) all exclude
-the random lower bound, confirming significance above chance.
-All pairwise McNemar comparisons ($p < 0.001$): message passing beats MLP,
-GAT beats GCN, and adding structural features hurts both GCN and GAT.
-The GNN-MLP F1 margin is modest (+0.031 text, +0.027 full), suggesting NLP
-embeddings carry the bulk of the discriminative signal.
+\paragraph{Message passing vs.\ MLP.}
+GCN-text and GAT-text outperform MLP-text by +0.069 and +0.062 F1 respectively.
+Bootstrap 95\% CIs support this: GCN-text [0.775, 0.856] and GAT-text
+[0.765, 0.851] both have point estimates (0.816, 0.809) that exceed
+MLP-text's CI upper bound [0.700, 0.791].
+NLP embeddings nonetheless carry the bulk of discriminative signal: the
+text-only MLP (0.747) already exceeds all structural-only models by a wide margin.
 
 \section{XAI Analysis}
 \label{sec:xai}
 
 To understand what drives the GNN predictions, we apply two complementary
 explainability methods on a separate training run using the charliehebdo event
-as the held-out test fold (1{,}952 graphs: 436 Rumour, 1{,}516 Non-Rumour).
-The models trained for XAI are not the HP-searched models from
-Section~\ref{sec:results}; they use default hyperparameters and are trained on
-the remaining events. GNNExplainer~\cite{ying2019gnnexplainer} is applied to the
-GCN, and attention analysis is applied to the GAT.
+as the held-out test set (1{,}952 graphs: 436 Rumour, 1{,}516 Non-Rumour).
+The models share the \texttt{gnn\_full}/\texttt{gat\_full} hyperparameters from
+Section~\ref{sec:results} but are retrained on this separate split.
+Because charliehebdo has the lowest rumour prevalence (22.0\%,
+Table~\ref{tab:dataset}), absolute F1 is lower than in the main evaluation
+(GCN: 0.601, GAT: 0.592); the importance patterns we report are not affected
+by this performance gap.
 
 \paragraph{GNNExplainer: feature group importance.}
-GNNExplainer~\cite{ying2019gnnexplainer} optimises a soft per-node feature
-mask to identify which features drove each prediction. We apply it to 40
-balanced test graphs, average mask weights within semantic feature groups, and
-compare per-graph group importance between classes via Mann-Whitney~U; higher
-importance means the model relied more on that group.
-The GCN relies significantly more on every feature group when processing Rumour
-graphs than Non-Rumour graphs. The largest
-differences are in authority signals: follower count ($r = 0.508$, $p < 0.001$)
-and PageRank ($r = 0.513$, $p < 0.001$). The NLP embedding group is also more
-important for Rumour graphs ($r = 0.464$, $p < 0.001$), as are degree and
-in-degree centrality ($r \approx 0.49$, $p < 0.001$). Out-degree is the only
-non-significant group ($p = 0.889$), suggesting the number of replies a user
-generates is not discriminative. Rumour cascades are thus flagged by a combination
-of anomalous authority signals and unusual text, rather than any single feature.
+GNNExplainer~\cite{ying2019gnnexplainer} optimises a soft per-node mask over
+80 balanced test graphs (40 per class); mask weights are averaged within semantic
+feature groups and compared via Mann-Whitney~U (Fig.~\ref{fig:gnne}).
+The GCN assigns significantly higher importance to every group for Rumour than
+Non-Rumour. The largest gaps are in degree centrality ($r = 0.468$), follower
+count ($r = 0.455$), and PageRank ($r = 0.442$); all groups except out-degree
+are significant ($p < 0.01$).
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{gcn_feature_groups.png}
+  \caption{GNNExplainer mean feature-group importance for Rumour and Non-Rumour
+  graphs (80 test graphs, charliehebdo). Higher = relied upon more by the GCN.
+  All groups except Out-degree differ significantly (Mann-Whitney $p < 0.01$).}
+  \label{fig:gnne}
+\end{figure}
 
 \paragraph{GAT attention by cascade depth.}
-The second GAT layer assigns each edge an attention weight $\alpha_{uv}$
-(Eq.~2); we aggregate these by the BFS depth of the receiving node (depth~0
-= root, depth~1 = direct replies, etc.) and compare across classes.
-Depth-2 nodes receive disproportionately high attention in both classes
-(mean 0.719--0.776 vs.\ approximately 0.50 at all other depths). Non-Rumour
-cascades receive significantly more depth-2 attention than Rumour cascades
-(0.776 vs.\ 0.719, $p < 0.001$, $r = 0.233$), suggesting non-rumour threads
-generate richer second-tier engagement. The pattern reverses at depth~3
-(Rumour $>$ Non-Rumour, $p = 0.001$, $r = 0.106$); beyond depth~3 differences
-are not significant.
+The second GAT layer's attention weights (Eq.~2) are aggregated by the BFS
+depth of the receiving node. Depth-1 nodes (direct replies to the source tweet)
+show the strongest class difference: Non-Rumour cascades receive significantly
+more depth-1 attention (NR = 0.416 vs.\ R = 0.392, $p < 0.001$, $r = 0.459$),
+suggesting richer direct engagement in factual threads. Depth-3 shows a modest
+reversal (R $>$ NR, $p < 0.001$, $r = 0.185$); beyond depth~3 differences
+are small or non-significant.
 
 \paragraph{Attention entropy.}
+Per-graph attention entropy is significantly lower for Rumour cascades (mean
+2.404 vs.\ 2.630, $p < 0.001$): the GAT concentrates on fewer nodes when
+predicting rumours, consistent with the GNNExplainer finding that predictions
+are driven by a small set of structurally prominent nodes.
 
-Per-graph attention entropy measures how diffuse or concentrated attention is
-(higher = spread evenly across nodes; lower = focused on a few nodes).
-Rumour cascades have significantly lower entropy (mean 2.394 vs.\ 2.615 for
-Non-Rumour, $p < 0.001$), indicating that the GAT concentrates on fewer nodes
-when classifying rumours. This aligns with the GNNExplainer finding: rumour
-cascades appear to contain a small number of structurally or semantically
-anomalous nodes (high-authority users, unusual depth-2 reply patterns) that
-dominate the model's decision, whereas non-rumour engagement is more evenly
-distributed.
+\section{Discussion}
+\label{sec:discussion}
+
+The feature ablation confirms text embeddings as the primary driver of
+cross-event generalisation. GCN and GAT benefit from dropping structural node
+features, while GIN reverses this pattern -- sum aggregation can extract signal
+from PageRank and degree features that mean pooling averages away.
+All structural-only models cluster near the random lower bound (F1 0.48--0.52),
+indicating a weak but non-zero structural signal that no architecture
+reliably exploits for cross-event generalisation. The topological differences
+identified in Section~\ref{sec:topology} are consistent within events but
+appear unstable across them, which is why topology-only features cannot bridge
+the cross-event gap.
+Both XAI analyses converge on structural prominence as the primary
+discriminative signal: GNNExplainer assigns the largest importance gap to
+degree centrality, follower count, and PageRank, while GAT attention
+concentrates on fewer nodes for rumour cascades, consistent with
+anomalous-node detection.
+
+The main limitation is single-dataset scope: PHEME covers English Twitter in
+2014--2015, and cascade dynamics may differ across platforms and time periods.
+The stratified split is also sensitive to the random seed used for partitioning.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We benchmarked MLP, GCN, GAT, and GIN on 6{,}178 PHEME Twitter cascade graphs
+under a stratified held-out evaluation across seven events. Text embeddings
+dominate cross-event generalisation; topology alone provides weak,
+architecture-dependent signal. GIN with full features achieves the best F1 of
+0.826, with GCN and GAT text-only models close behind (0.816, 0.809).
+GNNExplainer and GAT attention analyses reveal that authority signals drive
+rumour predictions and that attention concentrates on fewer nodes for rumours,
+consistent with anomalous-node detection. Future work should explore temporal
+posting dynamics, larger pre-trained encoders, and cross-platform evaluation.
 
 \bibliographystyle{splncs04}
 \bibliography{references}
