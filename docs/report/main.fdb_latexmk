@@ -1,13 +1,13 @@
 # Fdb version 4
-["bibtex main"] 1779136857.00632 "main.aux" "main.bbl" "main" 1779136857.75965 0
-  "./references.bib" 1779136853.76266 3852 b0313d5628aba400d49af96e97cf9c83 ""
+["bibtex main"] 1779137201.29062 "main.aux" "main.bbl" "main" 1779137202.05836 0
+  "./references.bib" 1779137200.32592 4097 2da6981168d4213d5c9e0235960beb22 ""
   "/usr/share/texlive/texmf-dist/bibtex/bst/llncs/splncs04.bst" 1698954974 32146 aadf770ded437d161532035219ea6f45 ""
-  "main.aux" 1779136857.51566 6877 7ce7171d86a5c00d2006007034d589ba "pdflatex"
+  "main.aux" 1779137201.80592 6906 8ec67f427dce2f5798e64d1d60e4029b "pdflatex"
   (generated)
   "main.bbl"
   "main.blg"
   (rewritten before read)
-["pdflatex"] 1779136857.12311 "/home/nuno/Documents/Misinformation-GNN/docs/report/main.tex" "main.pdf" "main" 1779136857.75979 0
+["pdflatex"] 1779137201.4154 "/home/nuno/Documents/Misinformation-GNN/docs/report/main.tex" "main.pdf" "main" 1779137202.05849 0
   "/etc/texmf/web2c/texmf.cnf" 1764507328.4437 475 c0e671620eb5563b2130f56340a5fde8 ""
   "/home/nuno/Documents/Misinformation-GNN/docs/report/main.tex" 1779136630.24041 25168 05077f7a93e04d46987a3908b616f93d ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
@@ -106,8 +106,8 @@
   "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1774798765 8213055 b74f3ced8925d6c470b38bd88fb65d14 ""
   "gcn_feature_groups.png" 1779135543.76327 70996 15c215b55288644754378083f5d6388e ""
   "llncs.cls" 1777995825.57897 43402 5fb5a2dc40571aa40f3d199c00cbb986 ""
-  "main.aux" 1779136857.51566 6877 7ce7171d86a5c00d2006007034d589ba "pdflatex"
-  "main.bbl" 1779136857.11866 3023 fc0e5378127ffa7fd7103b52d2c962d5 "bibtex main"
+  "main.aux" 1779137201.80592 6906 8ec67f427dce2f5798e64d1d60e4029b "pdflatex"
+  "main.bbl" 1779137201.41224 3196 e812a6c90ec1327984cd1adcb23842b3 "bibtex main"
   "main.tex" 1779136630.24041 25168 05077f7a93e04d46987a3908b616f93d ""
   (generated)
   "main.aux"
